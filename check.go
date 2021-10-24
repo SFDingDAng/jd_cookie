@@ -16,7 +16,7 @@ import (
 
 var jdWSCK = core.NewBucket("jdWSCK")
 
-var ua2 = `okhttp/3.12.1;jdmall;android;version/10.1.2;build/89743;screen/1440x3007;os/11;network/wifi;`
+var ua2 = `http/3.12.1;jdmall;android;version/10.1.2;build/89743;screen/1440x3007;os/11;network/wifi;`
 
 func init() {
 	go func() {
@@ -38,6 +38,9 @@ func init() {
 			Cron:  jdWSCK.Get("update", "55 * * * *"),
 			Admin: true,
 			Handle: func(s core.Sender) interface{} {
+				if s.GetImType() == "fake" && !jd_cookie.GetBool("enable_auto_update", true) {
+					return nil
+				}
 				var cks = map[string]qinglong.Env{}
 				var wscks = map[string]qinglong.Env{}
 				envs, _ := qinglong.GetEnvs("")
@@ -64,7 +67,7 @@ func init() {
 						continue
 					}
 					s.Reply(fmt.Sprintf("%s,JD_COOKIE已失效。", pin), core.E, core.N)
-					if err := qinglong.Req(qinglong.PUT, qinglong.ENVS, "/disable", []byte(`["`+env.ID+`"]`)); err != nil {
+					if err := qinglong.Config.Req(qinglong.PUT, qinglong.ENVS, "/disable", []byte(`["`+env.ID+`"]`)); err != nil {
 						s.Reply(fmt.Sprintf("%s,JD_COOKIE禁用失败。%v", pin, err), core.E)
 					} else {
 						s.Reply(fmt.Sprintf("%s,JD_COOKIE已禁用。", pin), core.E)
@@ -82,7 +85,7 @@ func init() {
 					if strings.Contains(pt_key, "fake") {
 						s.Reply(fmt.Sprintf("%s,JD_WSCK已失效。", pin), core.E)
 						if jdWSCK.Get("autoDisableWsck", "true") == "true" {
-							if err := qinglong.Req(qinglong.PUT, qinglong.ENVS, "/disable", []byte(`["`+wse.ID+`"]`)); err != nil {
+							if err := qinglong.Config.Req(qinglong.PUT, qinglong.ENVS, "/disable", []byte(`["`+wse.ID+`"]`)); err != nil {
 								s.Reply(fmt.Sprintf("%s,JD_WSCK禁用失败。%v", pin, err), core.E)
 							} else {
 								s.Reply(fmt.Sprintf("%s,JD_WSCK已禁用。", pin), core.E)
@@ -92,7 +95,7 @@ func init() {
 						continue
 					}
 					s.Reply(fmt.Sprintf("%s,JD_WSCK转换JD_COOKIE成功。", pin), core.E, core.N)
-					if err := qinglong.Req(qinglong.PUT, qinglong.ENVS, "/enable", []byte(`["`+env.ID+`"]`)); err != nil {
+					if err := qinglong.Config.Req(qinglong.PUT, qinglong.ENVS, "/enable", []byte(`["`+env.ID+`"]`)); err != nil {
 						s.Reply(fmt.Sprintf("%s,JD_COOKIE启用失败。%v", pin, err), core.E)
 					} else {
 						s.Reply(fmt.Sprintf("%s,JD_COOKIE已启用。", pin), core.E)
@@ -115,7 +118,7 @@ func init() {
 					if strings.Contains(pt_key, "fake") {
 						s.Reply(fmt.Sprintf("%s,JD_WSCK已失效。", pin), core.E)
 						if jdWSCK.Get("autoDisableWsck", "true") == "true" {
-							if err := qinglong.Req(qinglong.PUT, qinglong.ENVS, "/disable", []byte(`["`+wse.ID+`"]`)); err != nil {
+							if err := qinglong.Config.Req(qinglong.PUT, qinglong.ENVS, "/disable", []byte(`["`+wse.ID+`"]`)); err != nil {
 								s.Reply(fmt.Sprintf("%s,JD_WSCK禁用失败。%v", pin, err), core.E)
 							} else {
 								s.Reply(fmt.Sprintf("%s,JD_WSCK已禁用。", pin), core.E)
@@ -127,7 +130,7 @@ func init() {
 					value := fmt.Sprintf("pt_key=%s;pt_pin=%s;", pt_key, pin)
 					if env, ok := cks[pin]; ok {
 						env.Value = value
-						if err := qinglong.Req(qinglong.PUT, qinglong.ENVS, "/enable", []byte(`["`+env.ID+`"]`)); err != nil {
+						if err := qinglong.Config.Req(qinglong.PUT, qinglong.ENVS, "/enable", []byte(`["`+env.ID+`"]`)); err != nil {
 							s.Reply(fmt.Sprintf("%s,JD_COOKIE启用失败。%v", pin, err), core.E)
 						} else {
 							s.Reply(fmt.Sprintf("%s,JD_COOKIE已启用。", pin), core.E)

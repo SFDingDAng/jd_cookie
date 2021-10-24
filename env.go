@@ -90,10 +90,14 @@ func init() {
 					return "找不到对应的变量，无法交换顺序。"
 				}
 				toe[0].ID, toe[1].ID = toe[1].ID, toe[0].ID
-				if err := qinglong.Req(qinglong.PUT, qinglong.ENVS, toe[0]); err != nil {
+				toe[0].Timestamp = ""
+				toe[1].Timestamp = ""
+				toe[0].Created = 0
+				toe[1].Created = 0
+				if err := qinglong.Config.Req(qinglong.PUT, qinglong.ENVS, toe[0]); err != nil {
 					return err
 				}
-				if err := qinglong.Req(qinglong.PUT, qinglong.ENVS, toe[1]); err != nil {
+				if err := qinglong.Config.Req(qinglong.PUT, qinglong.ENVS, toe[1]); err != nil {
 					return err
 				}
 				return "交换成功"
@@ -103,7 +107,7 @@ func init() {
 			Rules: []string{`enable ?`},
 			Admin: true,
 			Handle: func(s core.Sender) interface{} {
-				if err := qinglong.Req(qinglong.PUT, qinglong.ENVS, "/enable", []byte(`["`+s.Get()+`"]`)); err != nil {
+				if err := qinglong.Config.Req(qinglong.PUT, qinglong.ENVS, "/enable", []byte(`["`+s.Get()+`"]`)); err != nil {
 					return err
 				}
 				return "操作成功"
@@ -113,7 +117,7 @@ func init() {
 			Rules: []string{`disable ?`},
 			Admin: true,
 			Handle: func(s core.Sender) interface{} {
-				if err := qinglong.Req(qinglong.PUT, qinglong.ENVS, "/disable", []byte(`["`+s.Get()+`"]`)); err != nil {
+				if err := qinglong.Config.Req(qinglong.PUT, qinglong.ENVS, "/disable", []byte(`["`+s.Get()+`"]`)); err != nil {
 					return err
 				}
 				return "操作成功"
@@ -123,12 +127,12 @@ func init() {
 			Rules: []string{`remark ? ?`},
 			Admin: true,
 			Handle: func(s core.Sender) interface{} {
-				env, err := qinglong.GetEnv(s.Get())
+				env, err := qinglong.GetEnv(s.Get(0))
 				if err != nil {
 					return err
 				}
 				env.Remarks = s.Get(1)
-				if err := qinglong.Req(qinglong.PUT, qinglong.ENVS, *env); err != nil {
+				if err := qinglong.Config.Req(qinglong.PUT, qinglong.ENVS, *env); err != nil {
 					return err
 				}
 				return "操作成功"
