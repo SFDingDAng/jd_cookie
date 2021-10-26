@@ -130,6 +130,7 @@ var GetAsset = func(ck *JdCookie) string {
 	return asset
 }
 
+//检测登录需增加接口
 func init() {
 	go func() {
 		for {
@@ -144,6 +145,7 @@ func init() {
 		c <- GetAsset(&ck)
 		return
 	}
+	//待做：增加惊喜工厂
 	core.AddCommand("jd", []core.Function{
 		{
 			Rules: []string{`asset ?`, `raw ^查询 (\S+)$`},
@@ -228,8 +230,28 @@ func init() {
 			},
 		},
 		{
-			Rules: []string{`raw ^查询$`},
+			Rules: []string{`^查询$`},
 			Handle: func(s core.Sender) interface{} {
+				go func() {
+					l := int64(jd_cookie.GetInt("query_wait_time"))
+					if l != 0 {
+						deadline := time.Now().Unix() + l
+						stop := false
+						for {
+							if stop {
+								break
+							}
+							s.Await(s, func(_ core.Sender) interface{} {
+								left := deadline - time.Now().Unix()
+								if left <= 0 {
+									stop = true
+									left = 1
+								}
+								return fmt.Sprintf("%d秒后再查询。", left)
+							}, "^查询$", time.Second)
+						}
+					}
+				}()
 				if groupCode := jd_cookie.Get("groupCode"); !s.IsAdmin() && groupCode != "" && s.GetChatID() != 0 && !strings.Contains(groupCode, fmt.Sprint(s.GetChatID())) {
 					return nil
 				}
