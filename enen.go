@@ -10,19 +10,20 @@ import (
 
 func init() {
 	core.AddCommand("jd", []core.Function{
-		 //{
-		 //	Rules: []string{"enen ?"},
-		 //	Admin: true,
-		 //	Handle: func(s core.Sender) interface{} {
-		 //		req := httplib.Get("https://plogin.m.jd.com/cgi-bin/ml/mlogout?appid=300&returnurl=https%3A%2F%2Fm.jd.com%2F")
-		 //		req.Header("authority", "plogin.m.jd.com")
-		 //		req.Header("User-Agent", ua())
-		 //		req.Header("cookie", s.Get())
-		 //		req.Header("host", "jd.com")
-		 //		req.Response()
-		 //		return "已注销登录"
-		 //	},
-		 //},
+		// enen 接口貌似失效了
+		// {
+		// 	Rules: []string{"enen ?"},
+		// 	Admin: true,
+		// 	Handle: func(s core.Sender) interface{} {
+		// 		req := httplib.Get("https://plogin.m.jd.com/cgi-bin/ml/mlogout?appid=300&returnurl=https%3A%2F%2Fm.jd.com%2F")
+		// 		req.Header("authority", "plogin.m.jd.com")
+		// 		req.Header("User-Agent", ua())
+		// 		req.Header("cookie", s.Get())
+		// 		req.Header("host", "jd.com")
+		// 		req.Response()
+		// 		return "已注销登录"
+		// 	},
+		// },
 		{
 			Rules: []string{"eueu ?"},
 			Admin: true,

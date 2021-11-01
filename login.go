@@ -41,22 +41,26 @@ func init() {
 				if groupCode := jd_cookie.Get("groupCode"); !s.IsAdmin() && groupCode != "" && s.GetChatID() != 0 && !strings.Contains(groupCode, fmt.Sprint(s.GetChatID())) {
 					return nil
 				}
-				if c == nil || s.GetImType() == "wxmp" {
+				if c == nil {
 					tip := jd_cookie.Get("tip")
 					if tip == "" {
 						if s.IsAdmin() {
-							return jd_cookie.Get("tip", "阿东不行啦，更改登录提示指令，set jd_cookie tip ?")
+							s.Reply(jd_cookie.Get("tip", "阿东又不行了。")) //已支持阿东前往了解，https://github.com/rubyangxg/jd-qinglong
+							return nil
 						} else {
 							tip = "暂时无法使用短信登录。"
 						}
 					}
-
-					return tip
+					s.Reply(tip)
+					return nil
 				}
+				go func() {
+					stop := false
+					phone := ""
+
 				uid := time.Now().UnixNano()
 				cry := make(chan string, 1)
 				mhome.Store(uid, cry)
-				stop := false
 				var deadline = time.Now().Add(time.Second * time.Duration(200))
 				var cookie *string
 				sendMsg := func(msg string) {
@@ -78,94 +82,140 @@ func init() {
 						},
 					})
 				}
-				defer func() {
-					cry <- "stop"
-					mhome.Delete(uid)
-					if cookie != nil {
-						s.SetContent(*cookie)
-						core.Senders <- s
+					if s.GetImType() == "wxmp" {
+						cancel := false
+						for {
+							if phone != "" {
+								break
+							}
+							if cancel {
+								break
+							}
+							s.Await(s, func(s core.Sender) interface{} {
+								message := s.GetContent()
+								if message == "退出" {
+									cancel = true
+									return "取消登录"
+								}
+								if regexp.MustCompile(`^\d{11}$`).FindString(message) == "" {
+									return "请输入格式正确的手机号，或者对我说“退出”。"
+								}
+								phone = message
+								return "请输入收到的验证码哦～"
+							})
+						}
+						if cancel {
+							return
+						}
 					}
-					sendMsg("q")
-				}()
 
-				go func() {
-					for {
-						msg := <-cry
-						if msg == "stop" {
-							break
-						}
-						msg = strings.Replace(msg, "登陆", "登录", -1)
-						if strings.Contains(msg, "不占资源") {
-							msg += "\n" + "4.取消"
-						}
-						{
-							res := regexp.MustCompile(`剩余操作时间：(\d+)`).FindStringSubmatch(msg)
-							if len(res) > 0 {
-								remain := core.Int(res[1])
-								deadline = time.Now().Add(time.Second * time.Duration(remain))
-							}
-						}
-						lines := strings.Split(msg, "\n")
-						new := []string{}
-						for _, line := range lines {
-							if !strings.Contains(line, "剩余操作时间") {
-								new = append(new, line)
-							}
-						}
-						msg = strings.Join(new, "\n")
-						if strings.Contains(msg, "青龙状态") {
-							sendMsg("1")
-							continue
-						}
-						if strings.Contains(msg, "pt_key") {
-							cookie = &msg
-							stop = true
-							s.SetContent("q")
+					defer func() {
+						cry <- "stop"
+						mhome.Delete(uid)
+						if cookie != nil {
+							s.SetContent(*cookie)
 							core.Senders <- s
 						}
-						if cookie == nil {
-							if strings.Contains(msg, "已点击登录") {
+						sendMsg("q")
+					}()
+					go func() {
+						for {
+							msg := <-cry
+							fmt.Println(msg)
+							if msg == "stop" {
+								break
+							}
+							msg = strings.Replace(msg, "登陆", "登录", -1)
+							if strings.Contains(msg, "不占资源") {
+								msg += "\n" + "4.取消"
+							}
+							{
+								res := regexp.MustCompile(`剩余操作时间：(\d+)`).FindStringSubmatch(msg)
+								if len(res) > 0 {
+									remain := core.Int(res[1])
+									deadline = time.Now().Add(time.Second * time.Duration(remain))
+								}
+							}
+							lines := strings.Split(msg, "\n")
+							new := []string{}
+							for _, line := range lines {
+								if !strings.Contains(line, "剩余操作时间") {
+									new = append(new, line)
+								}
+							}
+							msg = strings.Join(new, "\n")
+							if strings.Contains(msg, "请输入数字编号") {
+								sendMsg("1")
 								continue
 							}
-							s.Reply(msg)
-						}
-					}
-				}()
-				sendMsg("h")
-				for {
-					if stop == true {
-						break
-					}
-					if deadline.Before(time.Now()) {
-						stop = true
-						s.Reply("登录超时")
-						break
-					}
-					s.Await(s, func(s core.Sender) interface{} {
-						msg := s.GetContent()
-						if msg == "q" || msg == "exit" || msg == "退出" || msg == "10" || msg == "4" {
-							stop = true
+							if strings.Contains(msg, "请选择登录方式") {
+								sendMsg("1")
+								continue
+							}
+							if phone != "" && (strings.Contains(msg, "请输入手机号") || strings.Contains(msg, "请输入11位手机号")) {
+								sendMsg(phone)
+								continue
+							}
+							if strings.Contains(msg, "pt_key") {
+								cookie = &msg
+								stop = true
+								s.SetContent("q")
+								core.Senders <- s
+							}
 							if cookie == nil {
-								s.Reply("取消登录")
-							} else {
-								s.Reply("登录成功")
+								if strings.Contains(msg, "已点击登录") {
+									continue
+								}
+								s.Reply(msg)
 							}
 						}
-						sendMsg(s.GetContent())
-						return nil
-					}, `[\s\S]+`)
+					}()
+					sendMsg("h")
+					for {
+						if stop == true {
+							break
+						}
+						if deadline.Before(time.Now()) {
+							stop = true
+							s.Reply("登录超时")
+							break
+						}
+						s.Await(s, func(s core.Sender) interface{} {
+							msg := s.GetContent()
+							if msg == "q" || msg == "exit" || msg == "退出" || msg == "10" || msg == "4" {
+								stop = true
+								if cookie == nil {
+									return "取消登录"
+								} else {
+									return "登录成功"
+								}
+							}
+							if phone != "" {
+								if regexp.MustCompile(`^\d{6}$`).FindString(msg) == "" {
+									return "请输入格式正确的验证码，或者对我说“退出”。"
+								} else {
+									s.Reply("八九不离十登录成功啦，60秒后对我说“查询”已确认登录成功。")
+								}
+							}
+							sendMsg(s.GetContent())
+							return nil
+						}, `[\s\S]+`)
+					}
+				}()
+				if s.GetImType() == "wxmp" {
+					return "请输入11位手机号："
 				}
 				return nil
 			},
 		},
 	})
 	// if jd_cookie.GetBool("enable_aaron", false) {
-	core.Senders <- &core.Faker{
-		Message: "ql cron disable https://github.com/Aaron-lv/sync.git",
-	}
-	core.Senders <- &core.Faker{
-		Message: "ql cron disable task Aaron-lv_sync_jd_scripts_jd_city.js",
-	}
+	// core.Senders <- &core.Faker{
+	// 	Message: "ql cron disable https://github.com/Aaron-lv/sync.git",
+	// }
+	// core.Senders <- &core.Faker{
+	// 	Message: "ql cron disable task Aaron-lv_sync_jd_scripts_jd_city.js",
+	// }
 	// }
 }
 
@@ -210,7 +260,6 @@ func RunServer() {
 			}
 			ag := &AutoGenerated{}
 			json.Unmarshal(message, ag)
-			// ag.Params.Message = regexp.MustCompile(`\[CQ:[^\[\]]+]`).ReplaceAllString(ag.Params.Message, "")
 			if ag.Action == "send_private_msg" {
 				if cry, ok := mhome.Load(ag.Params.UserID); ok {
 					fmt.Println(ag.Params.Message)
