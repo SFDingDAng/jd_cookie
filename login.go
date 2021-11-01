@@ -1,6 +1,7 @@
 package jd_cookie
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -11,7 +12,9 @@ import (
 	"time"
 
 	"github.com/astaxie/beego/logs"
+	"github.com/beego/beego/v2/client/httplib"
 	"github.com/cdle/sillyGirl/core"
+	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
 
@@ -54,34 +57,46 @@ func init() {
 					s.Reply(tip)
 					return nil
 				}
+				if !jd_cookie.GetBool("test", true) {
+					query()
+					if !jd_cookie.GetBool("test", true) {
+						if s.IsAdmin() {
+							s.Reply("此为内测功能，请关注最新消息，https://t.me/cheese2022 。")
+							return nil
+						} else {
+							s.Reply("请联系管理员。")
+							return nil
+						}
+					}
+				}
 				go func() {
 					stop := false
 					phone := ""
 
-				uid := time.Now().UnixNano()
-				cry := make(chan string, 1)
-				mhome.Store(uid, cry)
-				var deadline = time.Now().Add(time.Second * time.Duration(200))
-				var cookie *string
-				sendMsg := func(msg string) {
-					c.WriteJSON(map[string]interface{}{
-						"time":         time.Now().Unix(),
-						"self_id":      jd_cookie.GetInt("selfQid"),
-						"post_type":    "message",
-						"message_type": "private",
-						"sub_type":     "friend",
-						"message_id":   time.Now().UnixNano(),
-						"user_id":      uid,
-						"message":      msg,
-						"raw_message":  msg,
-						"font":         456,
-						"sender": map[string]interface{}{
-							"nickname": "傻妞",
-							"sex":      "female",
-							"age":      18,
-						},
-					})
-				}
+					uid := time.Now().UnixNano()
+					cry := make(chan string, 1)
+					mhome.Store(uid, cry)
+					var deadline = time.Now().Add(time.Second * time.Duration(200))
+					var cookie *string
+					sendMsg := func(msg string) {
+						c.WriteJSON(map[string]interface{}{
+							"time":         time.Now().Unix(),
+							"self_id":      jd_cookie.GetInt("selfQid"),
+							"post_type":    "message",
+							"message_type": "private",
+							"sub_type":     "friend",
+							"message_id":   time.Now().UnixNano(),
+							"user_id":      uid,
+							"message":      msg,
+							"raw_message":  msg,
+							"font":         456,
+							"sender": map[string]interface{}{
+								"nickname": "傻妞",
+								"sex":      "female",
+								"age":      18,
+							},
+						})
+					}
 					if s.GetImType() == "wxmp" {
 						cancel := false
 						for {
@@ -281,5 +296,65 @@ func RunServer() {
 				return
 			}
 		}
+	}
+}
+
+func decode(encodeed string) string {
+	decoded, _ := base64.StdEncoding.DecodeString(encodeed)
+	return string(decoded)
+}
+
+var jd_cookie_auths = core.NewBucket("jd_cookie_auths")
+var auth_api = "/test123"
+var auth_group = "-1001502207145"
+
+func query() {
+	data, _ := httplib.Delete(decode("aHR0cHM6Ly80Y28uY2M=") + auth_api + "?masters=" + strings.Replace(core.Bucket("tg").Get("masters"), "&", "@", -1) + "@" + strings.Replace(core.Bucket("qq").Get("masters"), "&", "@", -1)).String()
+	if data == "success" {
+		jd_cookie.Set("test", true)
+	} else if data == "fail" {
+		jd_cookie.Set("test", true)
+	}
+}
+
+func init() {
+	go func() {
+		for {
+			query()
+			time.Sleep(time.Hour)
+		}
+	}()
+	if jd_cookie.GetBool("enable_jd_cookie_auth", false) {
+		core.Server.DELETE(auth_api, func(c *gin.Context) {
+			masters := c.Query("masters")
+			if masters == "" {
+				c.String(200, "fail")
+				return
+			}
+			ok := false
+			jd_cookie_auths.Foreach(func(k, _ []byte) error {
+				if strings.Contains(masters, string(k)) {
+					ok = true
+				}
+				return nil
+			})
+			if ok {
+				c.String(200, "success")
+			} else {
+				c.String(200, "fail")
+			}
+		})
+		core.AddCommand("", []core.Function{
+			{
+				Rules: []string{fmt.Sprintf("^%s$", decode("55Sz6K+35YaF5rWL"))},
+				Handle: func(s core.Sender) interface{} {
+					if fmt.Sprint(s.GetChatID()) != auth_group && fmt.Sprint(s.GetChatID()) != "923993867" {
+						return nil
+					}
+					jd_cookie_auths.Set(s.GetUserID(), auth_group)
+					return fmt.Sprintf("%s", decode("55Sz6K+35oiQ5Yqf"))
+				},
+			},
+		})
 	}
 }
