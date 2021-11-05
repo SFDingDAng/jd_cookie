@@ -105,7 +105,7 @@ func initLogin() {
 				})
 				req := httplib.Post(addr + "/api/SendSMS")
 				req.Header("content-type", "application/json")
-				data, _ = req.Body(`{"Phone":"` + phone + `","qlkey":0}`).Bytes()
+				data, _ = req.Body(`{"Phone":"` + phone + `","qlkey":1}`).Bytes()
 				message, _ := jsonparser.GetString(data, "message")
 				success, _ := jsonparser.GetBoolean(data, "success")
 				status, _ := jsonparser.GetInt(data, "data", "status")
@@ -137,7 +137,7 @@ func initLogin() {
 				})
 				req = httplib.Post(addr + "/api/VerifyCode")
 				req.Header("content-type", "application/json")
-				data, _ = req.Body(`{"Phone":"` + phone + `","QQ":"","qlkey":0,"Code":"` + code + `"}`).Bytes()
+				data, _ = req.Body(`{"Phone":"` + phone + `","QQ":"","qlkey":1,"Code":"` + code + `"}`).Bytes()
 				message, _ = jsonparser.GetString(data, "message")
 				if strings.Contains(string(data), "pt_pin=") {
 					s.Reply("登录成功")
