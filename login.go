@@ -83,7 +83,7 @@ func initLogin() {
 				addr := regexp.MustCompile(`^(https?://[\.\w]+:?\d*)`).FindString(jd_cookie.Get("nolan_addr"))
 				if addr == "" {
 					if s.IsAdmin() {
-						return "建议了解下若兰。"
+						return "建议了解下天猫精灵。"
 					} else {
 						return jd_cookie.Get("tip", "暂时无法使用短信登录。")
 					}
@@ -91,9 +91,9 @@ func initLogin() {
 				data, _ := httplib.Get(addr + "/api/Config").Bytes()
 				tabcount, _ := jsonparser.GetInt(data, "data", "tabcount")
 				if tabcount == 0 {
-					return "若兰很忙，请稍后再试。"
+					return "天猫精灵很忙，请稍后再试。"
 				}
-				s.Reply("若兰为您服务，请输入11位手机号：")
+				s.Reply("天猫精灵为您服务，请输入11位手机号：")
 				phone := ""
 				s.Await(s, func(s core.Sender) interface{} {
 					phone = regexp.MustCompile(`^\d{11}$`).FindString(s.GetContent())
