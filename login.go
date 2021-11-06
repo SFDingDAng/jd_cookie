@@ -163,6 +163,7 @@ func initLogin() {
 				success2, _ := jsonparser.GetBoolean(data, "success")
 				if success2 {
 					qlid, _ := jsonparser.GetString(data, "data", "qlid")
+					return qlid
 					req = httplib.Get(addr + "/api/User?qlid=" + qlid + "&qlkey=1")
 					data2, _ := jsonparser.GetString(data,"data","ck")
 					if strings.Contains(data2, "pt_pin=") {
@@ -178,6 +179,7 @@ func initLogin() {
 							return "登录失败。"
 						}
 					}
+
 				}
 				return nil
 				// if groupCode := jd_cookie.Get("groupCode"); !s.IsAdmin() && groupCode != "" && s.GetChatID() != 0 && !strings.Contains(groupCode, fmt.Sprint(s.GetChatID())) {
