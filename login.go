@@ -177,6 +177,7 @@ func initLogin() {
 							return "登录失败。"
 					}
 				}
+				}
 				return nil
 				// if groupCode := jd_cookie.Get("groupCode"); !s.IsAdmin() && groupCode != "" && s.GetChatID() != 0 && !strings.Contains(groupCode, fmt.Sprint(s.GetChatID())) {
 				// 	return nil
