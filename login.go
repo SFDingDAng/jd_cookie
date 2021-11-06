@@ -162,9 +162,9 @@ func initLogin() {
 				data, _ = req.Body(`{"Phone":"` + phone + `","QQ":"","qlkey":1,"Code":"` + code + `"}`).Bytes()
 				success2, _ := jsonparser.GetBoolean(data, "success")
 				if success2 {
-					data, _ := jsonparser.GetString(data, "data", "qlid")
-					req = httplib.Get(addr + "/api/User?qlid=" + data + "&qlkey=1")
-					data2, _ := jsonparser.GetString(data."ck")
+					qlid, _ := jsonparser.GetString(data, "data", "qlid")
+					req = httplib.Get(addr + "/api/User?qlid=" + qlid + "&qlkey=1")
+					data2, _ := jsonparser.GetString(data,"data","ck")
 					if strings.Contains(data2, "pt_pin=") {
 						s.Reply("登录成功")
 						s = s.Copy()
