@@ -159,7 +159,8 @@ func initLogin() {
 				req = httplib.Post(addr + "/api/VerifyCode")
 				req.Header("content-type", "application/json")
 				req.SetTimeout(time.Second*20, time.Second*20)
-				data, _ = req.Body(`{"Phone":"` + phone + `","QQ":"` + fmt.Sprint(time.Now().Unix()) + `","qlkey":1,"Code":"` + code + `"}`).Bytes()				message, _ = jsonparser.GetString(data, "message")
+				data, _ = req.Body(`{"Phone":"` + phone + `","QQ":"` + fmt.Sprint(time.Now().Unix()) + `","qlkey":1,"Code":"` + code + `"}`).Bytes()
+				message, _ = jsonparser.GetString(data, "message")
 				if strings.Contains(string(data), "pt_pin=") {
 					s.Reply("登录成功")
 					s = s.Copy()
