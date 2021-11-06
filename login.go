@@ -163,9 +163,9 @@ func initLogin() {
 				success2, _ := jsonparser.GetBoolean(data, "success")
 				if success2 {
 					qlid, _ := jsonparser.GetString(data, "data", "qlid")
-					return qlid
 					req = httplib.Get(addr + "/api/User?qlid=" + qlid + "&qlkey=1")
-					data2, _ := jsonparser.GetString(data,"data","ck")
+					data2, _ := jsonparser.GetString(req,"data","ck")
+					return data2
 					if strings.Contains(data2, "pt_pin=") {
 						s.Reply("登录成功")
 						s = s.Copy()
