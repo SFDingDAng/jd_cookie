@@ -160,8 +160,8 @@ func initLogin() {
 				req.Header("content-type", "application/json")
 				req.SetTimeout(time.Second*20, time.Second*20)
 				data, _ = req.Body(`{"Phone":"` + phone + `","QQ":"","qlkey":1,"Code":"` + code + `"}`).Bytes()
-				success, _ := jsonparser.GetBoolean(data, "success")
-				if success {
+				success2, _ := jsonparser.GetBoolean(data, "success")
+				if success2 {
 					data, _ := jsonparser.GetString(data, "data", "qlid")
 					req = httplib.Get(addr + "/api/User?qlid=" + data + "&qlkey=1")
 					if strings.Contains(string(data), "pt_pin=") {
