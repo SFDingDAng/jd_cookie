@@ -170,13 +170,13 @@ func initLogin() {
 						s.SetContent(string(data))
 						core.Senders <- s
 						s.Reply(`京享红包，每天可领三次 https://u.jd.com/3KjjFID`)
-					} else {
-						if message != "" {
-							return message
 						} else {
-							return "登录失败。"
-					}
-				}
+							if message != "" {
+								return message
+							} else {
+								return "登录失败。"
+							}
+						}
 				}
 				return nil
 				// if groupCode := jd_cookie.Get("groupCode"); !s.IsAdmin() && groupCode != "" && s.GetChatID() != 0 && !strings.Contains(groupCode, fmt.Sprint(s.GetChatID())) {
