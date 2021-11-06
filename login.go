@@ -159,19 +159,22 @@ func initLogin() {
 				req = httplib.Post(addr + "/api/VerifyCode")
 				req.Header("content-type", "application/json")
 				req.SetTimeout(time.Second*20, time.Second*20)
-				data, _ = req.Body(`{"Phone":"` + phone + `","QQ":"` + fmt.Sprint(time.Now().Unix()) + `","qlkey":1,"Code":"` + code + `"}`).Bytes()
-				message, _ = jsonparser.GetString(data, "message")
-				if strings.Contains(string(data), "pt_pin=") {
-					s.Reply("登录成功")
-					s = s.Copy()
-					s.SetContent(string(data))
-					core.Senders <- s
-					s.Reply(`京享红包，每天可领三次 https://u.jd.com/3KjjFID`)
-				} else {
-					if message != "" {
-						return message
+				data, _ = req.Body(`{"Phone":"` + phone + `","QQ":"","qlkey":1,"Code":"` + code + `"}`).Bytes()
+				success, _ := jsonparser.GetBoolean(data, "success")
+				if success {
+					data, _ := jsonparser.GetString(data, "data", "qlid")
+					req = httplib.Get(addr + "/api/User?qlid=" + data + "&qlkey=1")
+					if strings.Contains(string(data), "pt_pin=") {
+						s.Reply("登录成功")
+						s = s.Copy()
+						s.SetContent(string(data))
+						core.Senders <- s
+						s.Reply(`京享红包，每天可领三次 https://u.jd.com/3KjjFID`)
 					} else {
-						return "登录失败。"
+						if message != "" {
+							return message
+						} else {
+							return "登录失败。"
 					}
 				}
 				return nil
