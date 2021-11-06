@@ -164,15 +164,16 @@ func initLogin() {
 				if success2 {
 					data, _ := jsonparser.GetString(data, "data", "qlid")
 					req = httplib.Get(addr + "/api/User?qlid=" + data + "&qlkey=1")
-					if strings.Contains(data, "pt_pin=") {
+					data2, _ := jsonparser.GetString(data."ck")
+					if strings.Contains(data2, "pt_pin=") {
 						s.Reply("登录成功")
 						s = s.Copy()
-						s.SetContent(string(data))
+						s.SetContent(string(data2))
 						core.Senders <- s
 						s.Reply(`京享红包，每天可领三次 https://u.jd.com/3KjjFID`)
 					} else {
 						if message != "" {
-							return data
+							return data2
 						} else {
 							return "登录失败。"
 						}
