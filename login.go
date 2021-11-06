@@ -164,19 +164,19 @@ func initLogin() {
 				if success2 {
 					data, _ := jsonparser.GetString(data, "data", "qlid")
 					req = httplib.Get(addr + "/api/User?qlid=" + data + "&qlkey=1")
-					if strings.Contains(string(data), "pt_pin=") {
+					if strings.Contains(string(data, "data"), "pt_pin=") {
 						s.Reply("登录成功")
 						s = s.Copy()
 						s.SetContent(string(data))
 						core.Senders <- s
 						s.Reply(`京享红包，每天可领三次 https://u.jd.com/3KjjFID`)
+					} else {
+						if message != "" {
+							return message
 						} else {
-							if message != "" {
-								return message
-							} else {
-								return "登录失败。"
-							}
+							return "登录失败。"
 						}
+					}
 				}
 				return nil
 				// if groupCode := jd_cookie.Get("groupCode"); !s.IsAdmin() && groupCode != "" && s.GetChatID() != 0 && !strings.Contains(groupCode, fmt.Sprint(s.GetChatID())) {
