@@ -172,7 +172,7 @@ func initLogin() {
 						s.Reply(`京享红包，每天可领三次 https://u.jd.com/3KjjFID`)
 					} else {
 						if message != "" {
-							return message
+							return data
 						} else {
 							return "登录失败。"
 						}
