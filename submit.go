@@ -139,9 +139,10 @@ func initSubmit() {
 				} {
 					core.Bucket("pin" + strings.ToUpper(tp)).Foreach(func(k, v []byte) error {
 						pt_pin := string(k)
+						user_id := string(v)
 						if pt_pin == user_pin || user_pin == "all" {
 							if push, ok := core.Pushs[tp]; ok {
-								push(string(v), msg)
+								push(user_id, msg)
 							}
 						}
 						return nil
@@ -243,7 +244,6 @@ func initSubmit() {
 							s.Reply(err)
 							continue
 						}
-						assets.Delete(ck.PtPin)
 						rt := ck.Nickname + "，更新成功。"
 						core.NotifyMasters(rt)
 						s.Reply(rt)
