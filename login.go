@@ -2,20 +2,15 @@ package jd_cookie
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/url"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/astaxie/beego/logs"
 	"github.com/beego/beego/v2/client/httplib"
 	"github.com/buger/jsonparser"
 	"github.com/cdle/sillyGirl/core"
-	"github.com/gorilla/websocket"
 )
 
 var jd_cookie = core.NewBucket("jd_cookie")
@@ -72,7 +67,7 @@ func initLogin() {
 			time.Sleep(time.Second)
 		}
 	})
-	go RunServer()
+	// go RunServer()
 	core.AddCommand("", []core.Function{
 		{
 			Rules: []string{`raw ^登录$`, `raw ^登陆$`, `raw ^h$`},
@@ -80,106 +75,145 @@ func initLogin() {
 				if groupCode := jd_cookie.Get("groupCode"); !s.IsAdmin() && groupCode != "" && s.GetChatID() != 0 && !strings.Contains(groupCode, fmt.Sprint(s.GetChatID())) {
 					return nil
 				}
-				addr := regexp.MustCompile(`^(https?://[\.\w]+:?\d*)`).FindString(jd_cookie.Get("nolan_addr"))
-				if addr == "" {
+				addr := ""
+				var tabcount int64
+				addrs := strings.Split(jd_cookie.Get("nolan_addr"), "&")
+				if len(addrs) == 0 {
 					if s.IsAdmin() {
-						return "建议了解下天猫精灵。"
+						return "建议了解下若兰。"
 					} else {
 						return jd_cookie.Get("tip", "暂时无法使用短信登录。")
 					}
 				}
-				data, _ := httplib.Get(addr + "/api/Config").Bytes()
-				tabcount, _ := jsonparser.GetInt(data, "data", "tabcount")
-				if tabcount == 0 {
-					return "天猫精灵很忙，请稍后再试。"
-				}
-				s.Reply("天猫精灵为您服务，请输入11位手机号：(输入“q”随时退出会话。)")
-				cancel := false
-				phone := ""
-				s.Await(s, func(s core.Sender) interface{} {
-					ct := s.GetContent()
-					if ct == "q" {
-						cancel = true
-						return "已退出会话。"
-					}
-					phone = regexp.MustCompile(`^\d{11}$`).FindString(ct)
-					if phone == "" {
-						return core.GoAgain("请输入正确的手机号：")
-					}
-					// if s.GetImType() == "wxmp" {
-					// 	return "待会输入收到的验证码哦～"
-					// }					
-					s.Delete()
-					return nil
-				})
-				if cancel {
-					return nil
-				}
-				req := httplib.Post(addr + "/api/SendSMS")
-				req.Header("content-type", "application/json")
-				data, _ = req.Body(`{"Phone":"` + phone + `","qlkey":1}`).Bytes()
-				message, _ := jsonparser.GetString(data, "message")
-				success, _ := jsonparser.GetBoolean(data, "success")
-				status, _ := jsonparser.GetInt(data, "data", "status")
-				if message != "" && status != 666 {
-					s.Reply(message)
-				}
-				if !success && status == 666 {
-					s.Reply("正在进行滑块验证...")
-					req = httplib.Post(addr + "/api/AutoCaptcha")
-					req.SetTimeout(time.Second*60, time.Second*60)
-					req.Header("content-type", "application/json")
-					data, _ := req.Body(`{"Phone":"` + phone + `"}`).Bytes()
-					message, _ := jsonparser.GetString(data, "message")
-					success, _ := jsonparser.GetBoolean(data, "success")
-					if message != "" {
-						// s.Reply()
-					}
-					if !success {
-						return nil
-					}
-				}
-				s.Reply("请输入6位验证码：")
-				code := ""
-				s.Await(s, func(s core.Sender) interface{} {
-					ct := s.GetContent()
-					if ct == "q" {
-						cancel = true
-						return "已退出会话。"
-					}
-					code = regexp.MustCompile(`^\d{6}$`).FindString(ct)
-					if code == "" {
-						return core.GoAgain("请输入正确的验证码：")
-					}
-					return nil
-				})
-				if cancel {
-					return nil
-				}				
-				req = httplib.Post(addr + "/api/VerifyCode")
-				req.Header("content-type", "application/json")
-				req.SetTimeout(time.Second*20, time.Second*20)
-				data, _ = req.Body(`{"Phone":"` + phone + `","QQ":"","qlkey":1,"Code":"` + code + `"}`).Bytes()
-				success2, _ := jsonparser.GetBoolean(data, "success")
-				if success2 {
-					qlid, _ := jsonparser.GetString(data, "data", "qlid")
-					datareq, _ := httplib.Get(addr + "/api/User?qlid=" + qlid + "&qlkey=1").Bytes()
-					data2, _ := jsonparser.GetString(datareq, "data", "ck")
-					if strings.Contains(data2, "pt_pin=") {
-						s.Reply("登录成功")
-						s = s.Copy()
-						s.SetContent(string(data2))
-						core.Senders <- s
-						s.Reply(`京享红包，每天可领三次 https://u.jd.com/3KjjFID`)
-					} else {
-						if message != "" {
-							return data2
-						} else {
-							return "登录失败。"
+				for _, addr = range addrs {
+					addr = regexp.MustCompile(`^(https?://[\.\w]+:?\d*)`).FindString(addr)
+					if addr != "" {
+						data, _ := httplib.Get(addr + "/api/Config").Bytes()
+						tabcount, _ = jsonparser.GetInt(data, "data", "tabcount")
+						if tabcount != 0 {
+							break
 						}
 					}
-
 				}
+				if tabcount == 0 {
+					return "若兰很忙，请稍后再试。"
+				}
+				s.Reply("若兰为您服务，请输入11位手机号：(输入“q”随时退出会话。)")
+				go func() {
+					cancel := false
+					phone := ""
+					s.Await(s, func(s core.Sender) interface{} {
+						ct := s.GetContent()
+						if ct == "q" {
+							cancel = true
+							return "已退出会话。"
+						}
+						phone = regexp.MustCompile(`^\d{11}$`).FindString(ct)
+						if phone == "" {
+							return core.GoAgain("请输入正确的手机号：")
+						}
+						if s.GetImType() == "wxmp" {
+							return "待会输入收到的验证码哦～"
+						}
+						s.Delete()
+						return nil
+					})
+					if cancel {
+						return
+					}
+					req := httplib.Post(addr + "/api/SendSMS")
+					req.Header("content-type", "application/json")
+					data, err := req.Body(`{"Phone":"` + phone + `","qlkey":1}`).Bytes()
+					if err != nil {
+						s.Reply(err)
+						return
+					}
+					message, _ := jsonparser.GetString(data, "message")
+					success, _ := jsonparser.GetBoolean(data, "success")
+					status, _ := jsonparser.GetInt(data, "data", "status")
+					if message != "" && status != 666 {
+						s.Reply(message)
+					}
+					i := 1
+					if !success && status == 666 {
+
+						s.Reply("正在进行滑块验证...")
+						for {
+							req = httplib.Post(addr + "/api/AutoCaptcha")
+							req.Header("content-type", "application/json")
+							data, err := req.Body(`{"Phone":"` + phone + `"}`).Bytes()
+							if err != nil {
+								s.Reply(err)
+								return
+							}
+							message, _ := jsonparser.GetString(data, "message")
+							success, _ := jsonparser.GetBoolean(data, "success")
+							status, _ := jsonparser.GetInt(data, "data", "status")
+							// if message != "" {
+							// s.Reply()
+							// }
+							if !success {
+								//s.Reply("滑块验证失败：" + string(data))
+							}
+							if status == 666 {
+								i++
+								s.Reply(fmt.Sprintf("正在进行第%d次滑块验证...", i))
+								continue
+							}
+							if success {
+								break
+							}
+							s.Reply(message)
+							return
+						}
+					}
+					s.Reply("请输入6位验证码：")
+					code := ""
+					s.Await(s, func(s core.Sender) interface{} {
+						ct := s.GetContent()
+						if ct == "q" {
+							cancel = true
+							return "已退出会话。"
+						}
+						code = regexp.MustCompile(`^\d{6}$`).FindString(ct)
+						if code == "" {
+							return core.GoAgain("请输入正确的验证码：")
+						}
+						if s.GetImType() == "wxmp" {
+							return "八九不离十登录成功啦，10秒后对我说“查询”以确认登录成功。"
+						}
+						return nil
+					})
+					if cancel {
+						return
+					}
+					req = httplib.Post(addr + "/api/VerifyCode")
+					req.Header("content-type", "application/json")
+					data, _ = req.Body(`{"Phone":"` + phone + `","QQ":"` + fmt.Sprint(time.Now().Unix()) + `","qlkey":1,"Code":"` + code + `"}`).Bytes()
+					message, _ = jsonparser.GetString(data, "message")
+					if strings.Contains(string(data), "pt_pin=") {
+						s.Reply("登录成功。")
+						s = s.Copy()
+						s.SetContent(string(data))
+						core.Senders <- s
+						if !jd_cookie.GetBool("test", true) {
+							if time.Now().Unix()%99 == 0 {
+								s.Reply(`京享红包，每天可领三次 https://u.jd.com/3KjjFID`)
+							}
+						} else {
+							ad := jd_cookie.Get("ad")
+							if ad != "" {
+								s.Reply(ad)
+							}
+						}
+					} else {
+						if message != "" {
+							s.Reply(message)
+						} else {
+							s.Reply("登录失败。")
+						}
+					}
+				}()
 				return nil
 				// if groupCode := jd_cookie.Get("groupCode"); !s.IsAdmin() && groupCode != "" && s.GetChatID() != 0 && !strings.Contains(groupCode, fmt.Sprint(s.GetChatID())) {
 				// 	return nil
@@ -382,70 +416,70 @@ func initLogin() {
 	// }
 }
 
-var c *websocket.Conn
+// var c *websocket.Conn
 
-func RunServer() {
-	addr := jd_cookie.Get("adong_addr")
-	if addr == "" {
-		return
-	}
-	defer func() {
-		time.Sleep(time.Second * 2)
-		RunServer()
-	}()
-	u := url.URL{Scheme: "ws", Host: addr, Path: "/ws/event"}
-	logs.Info("连接阿东 %s", u.String())
-	var err error
-	c, _, err = websocket.DefaultDialer.Dial(u.String(), http.Header{
-		"X-Self-ID":     {fmt.Sprint(jd_cookie.GetInt("selfQid"))},
-		"X-Client-Role": {"Universal"},
-	})
-	if err != nil {
-		logs.Warn("连接阿东错误:", err)
-		return
-	}
-	defer c.Close()
-	go func() {
-		for {
-			_, message, err := c.ReadMessage()
-			if err != nil {
-				logs.Info("read:", err)
-				return
-			}
+// func RunServer() {
+// 	addr := jd_cookie.Get("adong_addr")
+// 	if addr == "" {
+// 		return
+// 	}
+// 	defer func() {
+// 		time.Sleep(time.Second * 2)
+// 		RunServer()
+// 	}()
+// 	u := url.URL{Scheme: "ws", Host: addr, Path: "/ws/event"}
+// 	logs.Info("连接阿东 %s", u.String())
+// 	var err error
+// 	c, _, err = websocket.DefaultDialer.Dial(u.String(), http.Header{
+// 		"X-Self-ID":     {fmt.Sprint(jd_cookie.GetInt("selfQid"))},
+// 		"X-Client-Role": {"Universal"},
+// 	})
+// 	if err != nil {
+// 		logs.Warn("连接阿东错误:", err)
+// 		return
+// 	}
+// 	defer c.Close()
+// 	go func() {
+// 		for {
+// 			_, message, err := c.ReadMessage()
+// 			if err != nil {
+// 				logs.Info("read:", err)
+// 				return
+// 			}
 
-			type AutoGenerated struct {
-				Action string `json:"action"`
-				Echo   string `json:"echo"`
-				Params struct {
-					UserID  int64  `json:"user_id"`
-					Message string `json:"message"`
-				} `json:"params"`
-			}
-			ag := &AutoGenerated{}
-			json.Unmarshal(message, ag)
-			if ag.Action == "send_private_msg" {
-				if cry, ok := mhome.Load(ag.Params.UserID); ok {
-					fmt.Println(ag.Params.Message)
-					cry.(chan string) <- ag.Params.Message
-				}
-			}
-			logs.Info("recv: %s", message)
-		}
-	}()
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			err := c.WriteMessage(websocket.TextMessage, []byte(`{}`))
-			if err != nil {
-				logs.Info("阿东错误:", err)
-				c = nil
-				return
-			}
-		}
-	}
-}
+// 			type AutoGenerated struct {
+// 				Action string `json:"action"`
+// 				Echo   string `json:"echo"`
+// 				Params struct {
+// 					UserID  int64  `json:"user_id"`
+// 					Message string `json:"message"`
+// 				} `json:"params"`
+// 			}
+// 			ag := &AutoGenerated{}
+// 			json.Unmarshal(message, ag)
+// 			if ag.Action == "send_private_msg" {
+// 				if cry, ok := mhome.Load(ag.Params.UserID); ok {
+// 					fmt.Println(ag.Params.Message)
+// 					cry.(chan string) <- ag.Params.Message
+// 				}
+// 			}
+// 			logs.Info("recv: %s", message)
+// 		}
+// 	}()
+// 	ticker := time.NewTicker(time.Second)
+// 	defer ticker.Stop()
+// 	for {
+// 		select {
+// 		case <-ticker.C:
+// 			err := c.WriteMessage(websocket.TextMessage, []byte(`{}`))
+// 			if err != nil {
+// 				logs.Info("阿东错误:", err)
+// 				c = nil
+// 				return
+// 			}
+// 		}
+// 	}
+// }
 
 func decode(encodeed string) string {
 	decoded, _ := base64.StdEncoding.DecodeString(encodeed)
