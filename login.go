@@ -170,7 +170,6 @@ func initLogin() {
 						s = s.Copy()
 						s.SetContent(string(data2))
 						core.Senders <- s
-						s.Reply(`京享红包，每天可领三次 https://u.jd.com/3KjjFID`)
 					} else {
 						if message != "" {
 							return data2
