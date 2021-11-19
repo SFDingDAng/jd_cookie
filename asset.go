@@ -223,23 +223,34 @@ func initAsset() {
 				envs, _ := qinglong.GetEnvs("JD_COOKIE")
 				qqGroup := jd_cookie.GetInt("qqGroup")
 				for _, env := range envs {
+					if env.Status != 0 {
+						continue
+					}
 					pt_pin := core.FetchCookieValue(env.Value, "pt_pin")
 					pt_key := core.FetchCookieValue(env.Value, "pt_key")
 					for _, tp := range []string{
 						"qq", "tg", "wx",
 					} {
+						var fs []func()
 						core.Bucket("pin" + strings.ToUpper(tp)).Foreach(func(k, v []byte) error {
 							if string(k) == pt_pin && pt_pin != "" {
 								if push, ok := core.Pushs[tp]; ok {
-									time.Sleep(time.Second)
-									push(string(v), GetAsset(&JdCookie{
-										PtPin: pt_pin,
-										PtKey: pt_key,
-									}), qqGroup)
+									fs = append(fs, func() {
+										push(string(v), GetAsset(&JdCookie{
+											PtPin: pt_pin,
+											PtKey: pt_key,
+										}), qqGroup)
+									})
 								}
 							}
 							return nil
 						})
+						if len(fs) != 0 {
+							for _, f := range fs {
+								f()
+							}
+						}
+						time.Sleep(time.Second)
 					}
 
 				}
@@ -1384,48 +1395,48 @@ func (ck *JdCookie) Available() bool {
 	if ck.PtKey == "" {
 		return false
 	}
-	// cookie := "pt_key=" + ck.PtKey + ";pt_pin=" + ck.PtPin + ";"
+	cookie := "pt_key=" + ck.PtKey + ";pt_pin=" + ck.PtPin + ";"
 	if ck == nil {
 		return true
 	}
-	// req := httplib.Get("https://me-api.jd.com/user_new/info/GetJDUserInfoUnion")
-	// req.Header("Cookie", cookie)
-	// req.Header("Accept", "*/*")
-	// req.Header("Accept-Language", "zh-cn,")
-	// req.Header("Connection", "keep-alive,")
-	// req.Header("Referer", "https://home.m.jd.com/myJd/newhome.action?sceneval=2&ufc=&")
-	// req.Header("Host", "me-api.jd.com")
-	// req.Header("User-Agent", ua())
-	// data, err := req.Bytes()
-	// if err != nil {
-	// 	return av2(ck)
-	// }
-	// ui := &UserInfoResult{}
-	// if nil != json.Unmarshal(data, ui) {
-	// 	return av2(ck)
-	// }
-	// switch ui.Retcode {
-	// // case "1001": //ck.BeanNum
-	// // 	if ui.Msg == "not login" {
-	// // 		return false
-	// // 	}
-	// case "0":
-	// 	realPin := url.QueryEscape(ui.Data.UserInfo.BaseInfo.CurPin)
-	// 	if realPin != ck.PtPin {
-	// 		if realPin == "" {
-	// 			return av2(ck)
-	// 		} else {
-	// 			ck.PtPin = realPin
-	// 		}
+	req := httplib.Get("https://me-api.jd.com/user_new/info/GetJDUserInfoUnion")
+	req.Header("Cookie", cookie)
+	req.Header("Accept", "*/*")
+	req.Header("Accept-Language", "zh-cn,")
+	req.Header("Connection", "keep-alive,")
+	req.Header("Referer", "https://home.m.jd.com/myJd/newhome.action?sceneval=2&ufc=&")
+	req.Header("Host", "me-api.jd.com")
+	req.Header("User-Agent", ua())
+	data, err := req.Bytes()
+	if err != nil {
+		return av2(ck)
+	}
+	ui := &UserInfoResult{}
+	if nil != json.Unmarshal(data, ui) {
+		return av2(ck)
+	}
+	switch ui.Retcode {
+	// case "1001": //ck.BeanNum
+	// 	if ui.Msg == "not login" {
+	// 		return false
 	// 	}
-	// 	if ui.Data.UserInfo.BaseInfo.Nickname != ck.Nickname || ui.Data.AssetInfo.BeanNum != ck.BeanNum || ui.Data.UserInfo.BaseInfo.UserLevel != ck.UserLevel || ui.Data.UserInfo.BaseInfo.LevelName != ck.LevelName {
-	// 		ck.UserLevel = ui.Data.UserInfo.BaseInfo.UserLevel
-	// 		ck.LevelName = ui.Data.UserInfo.BaseInfo.LevelName
-	// 		ck.Nickname = ui.Data.UserInfo.BaseInfo.Nickname
-	// 		ck.BeanNum = ui.Data.AssetInfo.BeanNum
-	// 	}
-	// 	return true
-	// }
+	case "0":
+		realPin := url.QueryEscape(ui.Data.UserInfo.BaseInfo.CurPin)
+		if realPin != ck.PtPin {
+			if realPin == "" {
+				return av2(ck)
+			} else {
+				ck.PtPin = realPin
+			}
+		}
+		if ui.Data.UserInfo.BaseInfo.Nickname != ck.Nickname || ui.Data.AssetInfo.BeanNum != ck.BeanNum || ui.Data.UserInfo.BaseInfo.UserLevel != ck.UserLevel || ui.Data.UserInfo.BaseInfo.LevelName != ck.LevelName {
+			ck.UserLevel = ui.Data.UserInfo.BaseInfo.UserLevel
+			ck.LevelName = ui.Data.UserInfo.BaseInfo.LevelName
+			ck.Nickname = ui.Data.UserInfo.BaseInfo.Nickname
+			ck.BeanNum = ui.Data.AssetInfo.BeanNum
+		}
+		return true
+	}
 	return av2(ck)
 }
 
