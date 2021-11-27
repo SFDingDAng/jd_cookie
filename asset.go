@@ -215,62 +215,48 @@ func initAsset() {
 				return nil
 			},
 		},
-		{
-			Rules: []string{`raw ^资产推送$`},
-			Cron:  jd_cookie.Get("asset_push"),
-			Admin: true,
-			Handle: func(_ core.Sender) interface{} {
-				envs, _ := qinglong.GetEnvs("JD_COOKIE")
-				qqGroup := jd_cookie.GetInt("qqGroup")
-				for _, env := range envs {
-					if env.Status != 0 {
-						continue
-					}
-					pt_pin := core.FetchCookieValue(env.Value, "pt_pin")
-					pt_key := core.FetchCookieValue(env.Value, "pt_key")
-					for _, tp := range []string{
-						"qq", "tg", "wx",
-					} {
-						var fs []func()
-						core.Bucket("pin" + strings.ToUpper(tp)).Foreach(func(k, v []byte) error {
-							if string(k) == pt_pin && pt_pin != "" {
-								if push, ok := core.Pushs[tp]; ok {
-									fs = append(fs, func() {
-										push(string(v), GetAsset(&JdCookie{
-											PtPin: pt_pin,
-											PtKey: pt_key,
-										}), qqGroup)
-									})
-								}
-							}
-							return nil
-						})
-						if len(fs) != 0 {
-							for _, f := range fs {
-								f()
-							}
-						}
-						time.Sleep(time.Second)
-					}
+		// {
+		// 	Rules: []string{`raw ^资产推送$`},
+		// 	Cron:  jd_cookie.Get("asset_push"),
+		// 	Admin: true,
+		// 	Handle: func(_ core.Sender) interface{} {
+		// 		envs, _ := qinglong.GetEnvs("JD_COOKIE")
+		// 		qqGroup := jd_cookie.GetInt("qqGroup")
+		// 		for _, env := range envs {
+		// 			if env.Status != 0 {
+		// 				continue
+		// 			}
+		// 			pt_pin := core.FetchCookieValue(env.Value, "pt_pin")
+		// 			pt_key := core.FetchCookieValue(env.Value, "pt_key")
+		// 			for _, tp := range []string{
+		// 				"qq", "tg", "wx",
+		// 			} {
+		// 				var fs []func()
+		// 				core.Bucket("pin" + strings.ToUpper(tp)).Foreach(func(k, v []byte) error {
+		// 					if string(k) == pt_pin && pt_pin != "" {
+		// 						if push, ok := core.Pushs[tp]; ok {
+		// 							fs = append(fs, func() {
+		// 								push(string(v), GetAsset(&JdCookie{
+		// 									PtPin: pt_pin,
+		// 									PtKey: pt_key,
+		// 								}), qqGroup)
+		// 							})
+		// 						}
+		// 					}
+		// 					return nil
+		// 				})
+		// 				if len(fs) != 0 {
+		// 					for _, f := range fs {
+		// 						f()
+		// 					}
+		// 				}
+		// 				time.Sleep(time.Second)
+		// 			}
 
-				}
-				return "推送完成"
-			},
-		},
-		{
-			Rules: []string{`raw ^任务通知$`},
-			Cron:  jd_cookie.Get("task_Notify", "2 7,13,19 * * *"),
-			Admin: true,
-			Handle: func(_ core.Sender) interface{} {
-				envs, _ := qinglong.GetEnvs("JD_COOKIE")
-				for _, env := range envs {
-					initPetTown(env.Value, nil)
-					initFarm(env.Value, nil)
-					dream(env.Value, nil)
-				}
-				return "推送完成"
-			},
-		},
+		// 		}
+		// 		return "推送完成"
+		// 	},
+		// },
 		{
 			Rules: []string{`^` + jd_cookie.Get("asset_query_alias", "查询") + `$`},
 			Handle: func(s core.Sender) interface{} {
@@ -296,7 +282,6 @@ func initAsset() {
 						}
 					}()
 				}
-
 				if groupCode := jd_cookie.Get("groupCode"); !s.IsAdmin() && groupCode != "" && s.GetChatID() != 0 && !strings.Contains(groupCode, fmt.Sprint(s.GetChatID())) {
 					return nil
 				}
@@ -1055,27 +1040,24 @@ func initFarm(cookie string, state chan string) {
 	json.Unmarshal(data, &a)
 	pt_pin := core.FetchCookieValue("pt_pin", cookie)
 	rt := a.FarmUserPro.Name
+	not := ""
 	if rt == "" {
 		rt = "数据异常"
 	} else {
 		if a.TreeState == 2 || a.TreeState == 3 {
-
 			rt += "已可领取⏰"
-			if state == nil {
-				Notify(pt_pin, "东东农场通知("+pt_pin+")：\n"+rt)
-			}
-
+			not = rt
 		} else if a.TreeState == 1 {
 			rt += fmt.Sprintf("种植中，进度%.2f%%🍒", 100*float64(a.FarmUserPro.TreeEnergy)/float64(a.FarmUserPro.TreeTotalEnergy))
 		} else if a.TreeState == 0 {
 			rt = "您忘了种植新的水果⏰"
-			if state == nil {
-				Notify(core.FetchCookieValue("pt_pin", cookie), "东东农场通知("+pt_pin+")：\n"+rt)
-			}
+			not = rt
 		}
 	}
 	if state != nil {
 		state <- rt
+	} else if not != "" {
+		a叉哦叉哦(pt_pin, "东东农场", not)
 	}
 }
 
@@ -1160,30 +1142,23 @@ func initPetTown(cookie string, state chan string) {
 	json.Unmarshal(data, &a)
 	rt := ""
 	pt_pin := core.FetchCookieValue("pt_pin", cookie)
+	not := ""
 	if a.Code == "0" && a.ResultCode == "0" && a.Message == "success" {
 		if a.Result.UserStatus == 0 {
 			rt = "请手动开启活动⏰"
-			if state == nil {
-				Notify(pt_pin, "东东萌宠通知("+pt_pin+")：\n"+rt)
-			}
+			not = rt
 
 		} else if a.Result.GoodsInfo.GoodsName == "" {
 			rt = "你忘了选购新的商品⏰"
-			if state == nil {
-				Notify(pt_pin, "东东萌宠通知("+pt_pin+")：\n"+rt)
-			}
+			not = rt
 
 		} else if a.Result.PetStatus == 5 {
 			rt = a.Result.GoodsInfo.GoodsName + "已可领取⏰"
-			if state == nil {
-				Notify(pt_pin, "东东萌宠通知("+pt_pin+")：\n"+rt)
-			}
+			not = rt
 
 		} else if a.Result.PetStatus == 6 {
 			rt = a.Result.GoodsInfo.GoodsName + "未继续领养新的物品⏰"
-			if state == nil {
-				Notify(pt_pin, "东东萌宠通知("+pt_pin+")：\n"+rt)
-			}
+			not = rt
 		} else {
 			rt = a.Result.GoodsInfo.GoodsName + fmt.Sprintf("领养中，进度%.2f%%，勋章%d/%d🐶", a.Result.MedalPercent, a.Result.MedalNum, a.Result.GoodsInfo.ExchangeMedalNum)
 		}
@@ -1192,8 +1167,9 @@ func initPetTown(cookie string, state chan string) {
 	}
 	if state != nil {
 		state <- rt
+	} else if not != "" {
+		a叉哦叉哦(pt_pin, "东东萌宠", not)
 	}
-
 }
 
 func jsGold(cookie string, state chan int64) { //
@@ -1893,7 +1869,6 @@ func dream(cookie string, state chan string) {
 		state <- desc
 	}
 	if not {
-		pt_pin := core.FetchCookieValue("pt_pin", cookie)
-		Notify(pt_pin, "京喜工厂通知("+pt_pin+")：\n"+desc)
+		a叉哦叉哦(core.FetchCookieValue("pt_pin", cookie), "京喜工厂", desc)
 	}
 }
