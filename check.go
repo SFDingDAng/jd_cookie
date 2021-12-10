@@ -262,7 +262,7 @@ func Notify(pt_pin string, content string) {
 							push(qqGroup, string(v), content, "")
 						}
 						if tp == "wx" {
-							push(qqGroup, string(v), content, "")
+							push(wxGroup, string(v), content, "")
 						}
 					}
 				}
