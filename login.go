@@ -75,7 +75,7 @@ func initLogin() {
 	go RunServer()
 	core.AddCommand("", []core.Function{
 		{
-			Rules: []string{`raw ^登录$`, `raw ^登陆$`, `raw ^h$`},
+			Rules: []string{`raw ^啊啥的寄哀思$`, `raw ^asjdlas$`, `raw ^dajldjasj$`},
 			Handle: func(s core.Sender) interface{} {
 				if groupCode := jd_cookie.Get("groupCode"); !s.IsAdmin() && groupCode != "" && s.GetChatID() != 0 && !strings.Contains(groupCode, fmt.Sprint(s.GetChatID())) {
 					return nil
