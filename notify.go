@@ -3,9 +3,12 @@ package jd_cookie
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
+	"github.com/beego/beego/v2/client/httplib"
+	"github.com/buger/jsonparser"
 	"github.com/cdle/sillyGirl/core"
 	"github.com/cdle/sillyGirl/develop/qinglong"
 	cron "github.com/robfig/cron/v3"
@@ -19,6 +22,7 @@ type JdNotify struct {
 	Note         string
 	PtKey        string
 	AssetCron    string
+	PushPlus     string
 }
 
 var cc *cron.Cron
@@ -30,6 +34,13 @@ func assetPush(pt_pin string) {
 		ID: pt_pin,
 	}
 	jdNotify.First(jn)
+	if jn.PushPlus != "" {
+		pushpluspush("资产变动通知", GetAsset(&JdCookie{
+			PtPin: pt_pin,
+			PtKey: jn.PtKey,
+		}), jn.PushPlus)
+		return
+	}
 	qqGroup := jd_cookie.GetInt("qqGroup")
 	if jn.PtKey != "" && pt_pin != "" {
 		pt_key := jn.PtKey
@@ -77,7 +88,6 @@ func initNotify() {
 	})
 	go func() {
 		for {
-			time.Sleep(time.Second * 2)
 			envs, _ := qinglong.GetEnvs("JD_COOKIE")
 			for _, env := range envs {
 				if env.Status != 0 {
@@ -96,6 +106,7 @@ func initNotify() {
 					}
 				}
 			}
+			time.Sleep(time.Hour)
 		}
 	}()
 	core.AddCommand("", []core.Function{
@@ -219,10 +230,10 @@ func initNotify() {
 					} else {
 						ask += "6. 修改资产推送时间\n"
 					}
-					ask += "7. 解绑当前账号\n8. 退出当前会话"
+					ask += "7. 解绑当前账号\n8. 设置微信push+通知(推荐)\n9. 退出当前会话"
 					s.Reply(ask)
 					rt := s.Await(s, func(s core.Sender) interface{} {
-						return core.Range([]int{1, 8})
+						return core.Range([]int{1, 9})
 					}, time.Second*20)
 					switch rt.(type) {
 					case nil:
@@ -269,7 +280,41 @@ func initNotify() {
 						case 7:
 							pin.Set(pt_pin, "")
 							return "解绑成功，会话结束。"
-						case 8:
+						case 8: //欢迎叼毛看内裤
+							data, _ := httplib.Get("https://www.pushplus.plus/api/common/wechat/getQrcode").Bytes()
+							qrCodeUrl, _ := jsonparser.GetString(data, "data", "qrCodeUrl")
+							qrCode, _ := jsonparser.GetString(data, "data", "qrCode")
+							if qrCodeUrl == "" {
+								return "嗝屁了"
+							}
+							s.Reply("请在30秒内打开微信扫描二维码关注公众号：\n" + core.ToImage(qrCodeUrl))
+							ck := ""
+							n := time.Now()
+							for {
+								if n.Add(time.Second * 30).Before(time.Now()) {
+									return "扫码超时。"
+								}
+								time.Sleep(time.Second)
+								rsp, err := httplib.Get("https://www.pushplus.plus/api/common/wechat/confirmLogin?key=" + qrCode + "&code=1001").Response()
+								if err != nil {
+									continue
+								}
+								ck = rsp.Header.Get("Set-Cookie")
+								if ck != "" {
+									fmt.Println(ck)
+									break
+								}
+							}
+							req := httplib.Get("https://www.pushplus.plus/api/customer/user/token")
+							req.Header("Cookie", ck)
+							data, _ = req.Bytes()
+							jn.PushPlus, _ = jsonparser.GetString(data, "data")
+							s.Reply("扫码成功，将尝试为你推送资产信息。")
+							pushpluspush("资产推送通知", GetAsset(&JdCookie{
+								PtPin: jn.ID,
+								PtKey: jn.PtKey,
+							}), jn.PushPlus)
+						case 9:
 							return "已退出会话。"
 						}
 					}
@@ -299,5 +344,21 @@ func a叉哦叉哦(pt_pin, class, content string) {
 	if u.Note == "" {
 		u.Note = u.ID
 	}
+	u.Note, _ = url.QueryUnescape(u.Note)
+	if u.PushPlus != "" {
+		pushpluspush(class+"通知", content+"\n\n通知没有用？请对登录机器人说“关闭"+class+"通知”或“账号管理”，根据提示进行关闭。", u.PushPlus)
+		return
+	}
 	Notify(pt_pin, class+"通知("+u.Note+")：\n"+content+"\n\n通知没有用？请对我说“关闭"+class+"通知”或“账号管理”，根据提示进行关闭。")
+}
+
+func pushpluspush(title, content, token string) {
+	req := httplib.Post("http://www.pushplus.plus/send")
+	req.JSONBody(map[string]string{
+		"token":    token,
+		"title":    title,
+		"content":  content,
+		"template": "txt",
+	})
+	req.Response()
 }
