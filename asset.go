@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -563,7 +562,7 @@ func LimitJdCookie(cks []JdCookie, a string) []JdCookie {
 		}
 	}
 	if len(ncks) == 0 {
-		a = strings.Replace(a, " ", "", -1)
+		a = strings.Replace(a, "", "", -1)
 		for i := range cks {
 			if strings.Contains(cks[i].Note, a) || strings.Contains(cks[i].Nickname, a) || strings.Contains(cks[i].PtPin, a) {
 				ncks = append(ncks, cks[i])
@@ -631,241 +630,6 @@ var Float64 = func(s string) float64 {
 	return i
 }
 
-func (ck *JdCookie) QueryAsset() string {
-	msgs := []string{}
-	if ck.Note != "" {
-		msgs = append(msgs, fmt.Sprintf("账号备注：%s", ck.Note))
-	}
-	asset := Asset{}
-	if ck.Available() {
-		// msgs = append(msgs, fmt.Sprintf("用户等级：%v", ck.UserLevel))
-		// msgs = append(msgs, fmt.Sprintf("等级名称：%v", ck.LevelName))
-		cookie := fmt.Sprintf("pt_key=%s;pt_pin=%s;", ck.PtKey, ck.PtPin)
-		var rpc = make(chan []RedList)
-		var fruit = make(chan string)
-		var pet = make(chan string)
-		var dm = make(chan string)
-		var gold = make(chan int64)
-		var egg = make(chan int64)
-		var tyt = make(chan string)
-		var mmc = make(chan int64)
-		var zjb = make(chan int64)
-		var xdm = make(chan []int)
-		go queryuserjingdoudetail(cookie, xdm)
-		go dream(cookie, dm)
-		go redPacket(cookie, rpc)
-		go initFarm(cookie, fruit)
-		go initPetTown(cookie, pet)
-		go jsGold(cookie, gold)
-		go jxncEgg(cookie, egg)
-		go tytCoupon(cookie, tyt)
-		go mmCoin(cookie, mmc)
-		go jdzz(cookie, zjb)
-		today := time.Now().Local().Format("2006-01-02")
-		yestoday := time.Now().Local().Add(-time.Hour * 24).Format("2006-01-02")
-		page := 1
-		end := false
-		var xdd []int
-		for {
-			if end {
-				xdd = <-xdm
-				ti := []string{}
-				if asset.Bean.YestodayIn != 0 {
-					ti = append(ti, fmt.Sprintf("%d京豆", asset.Bean.YestodayIn))
-				}
-				if xdd[3] != 0 {
-					ti = append(ti, fmt.Sprintf("%d喜豆", xdd[3]))
-				}
-				if len(ti) > 0 {
-					msgs = append(msgs,
-						"昨日收入："+strings.Join(ti, "、"),
-					)
-				}
-				ti = []string{}
-				if asset.Bean.YestodayOut != 0 {
-					ti = append(ti, fmt.Sprintf("%d京豆", asset.Bean.YestodayOut))
-				}
-				if xdd[4] != 0 {
-					ti = append(ti, fmt.Sprintf("%d喜豆", xdd[4]))
-				}
-				if len(ti) > 0 {
-					msgs = append(msgs,
-						"昨日支出："+strings.Join(ti, "、"),
-					)
-				}
-				ti = []string{}
-				if asset.Bean.TodayIn != 0 {
-					ti = append(ti, fmt.Sprintf("%d京豆", asset.Bean.TodayIn))
-				}
-				if xdd[1] != 0 {
-					ti = append(ti, fmt.Sprintf("%d喜豆", xdd[1]))
-				}
-				if len(ti) > 0 {
-					msgs = append(msgs,
-						"今日收入："+strings.Join(ti, "、"),
-					)
-				}
-				ti = []string{}
-				if asset.Bean.TodayOut != 0 {
-					ti = append(ti, fmt.Sprintf("%d京豆", asset.Bean.TodayOut))
-				}
-				if xdd[2] != 0 {
-					ti = append(ti, fmt.Sprintf("%d喜豆", xdd[2]))
-				}
-				if len(ti) > 0 {
-					msgs = append(msgs,
-						"今日支出："+strings.Join(ti, "、"),
-					)
-				}
-				break
-			}
-			bds := getJingBeanBalanceDetail(page, cookie)
-			if bds == nil {
-				end = true
-				msgs = append(msgs, "京豆数据异常")
-				break
-			}
-			for _, bd := range bds {
-				amount := Int(bd.Amount)
-				if strings.Contains(bd.Date, today) {
-					if amount > 0 {
-						asset.Bean.TodayIn += amount
-					} else {
-						asset.Bean.TodayOut += -amount
-					}
-				} else if strings.Contains(bd.Date, yestoday) {
-					if amount > 0 {
-						asset.Bean.YestodayIn += amount
-					} else {
-						asset.Bean.YestodayOut += -amount
-					}
-				} else {
-					end = true
-					break
-				}
-			}
-			page++
-		}
-		var ti []string
-		if ck.BeanNum != "" {
-			ti = append(ti, ck.BeanNum+"京豆")
-		}
-		if len(xdd) > 0 && xdd[0] != 0 {
-			ti = append(ti, fmt.Sprint(xdd[0])+"喜豆")
-		}
-		if len(ti) > 0 {
-			msgs = append(msgs, "当前豆豆："+strings.Join(ti, "、"))
-		}
-		ysd := int(time.Now().Add(24 * time.Hour).Unix())
-		if rps := <-rpc; len(rps) != 0 {
-			for _, rp := range rps {
-				b := Float64(rp.Balance)
-				asset.RedPacket.Total += b
-				if strings.Contains(rp.ActivityName, "京喜") || strings.Contains(rp.OrgLimitStr, "京喜") {
-					asset.RedPacket.Jx += b
-					if ysd >= rp.EndTime {
-						asset.RedPacket.ToExpireJx += b
-						asset.RedPacket.ToExpire += b
-					}
-				} else if strings.Contains(rp.ActivityName, "极速版") {
-					asset.RedPacket.Js += b
-					if ysd >= rp.EndTime {
-						asset.RedPacket.ToExpireJs += b
-						asset.RedPacket.ToExpire += b
-					}
-
-				} else if strings.Contains(rp.ActivityName, "京东健康") {
-					asset.RedPacket.Jk += b
-					if ysd >= rp.EndTime {
-						asset.RedPacket.ToExpireJk += b
-						asset.RedPacket.ToExpire += b
-					}
-				} else {
-					asset.RedPacket.Jd += b
-					if ysd >= rp.EndTime {
-						asset.RedPacket.ToExpireJd += b
-						asset.RedPacket.ToExpire += b
-					}
-				}
-			}
-			e := func(m float64) string {
-				if m > 0 {
-					return fmt.Sprintf(`(今日过期%.2f)`, m)
-				}
-				return ""
-			}
-			if asset.RedPacket.Total != 0 {
-				msgs = append(msgs, fmt.Sprintf("所有红包：%.2f%s元🧧", asset.RedPacket.Total, e(asset.RedPacket.ToExpire)))
-				if asset.RedPacket.Jx != 0 {
-					msgs = append(msgs, fmt.Sprintf("京喜红包：%.2f%s元", asset.RedPacket.Jx, e(asset.RedPacket.ToExpireJx)))
-				}
-				if asset.RedPacket.Js != 0 {
-					msgs = append(msgs, fmt.Sprintf("极速红包：%.2f%s元", asset.RedPacket.Js, e(asset.RedPacket.ToExpireJs)))
-				}
-				if asset.RedPacket.Jd != 0 {
-					msgs = append(msgs, fmt.Sprintf("京东红包：%.2f%s元", asset.RedPacket.Jd, e(asset.RedPacket.ToExpireJd)))
-				}
-				if asset.RedPacket.Jk != 0 {
-					msgs = append(msgs, fmt.Sprintf("健康红包：%.2f%s元", asset.RedPacket.Jk, e(asset.RedPacket.ToExpireJk)))
-				}
-			}
-
-		} else {
-			// msgs = append(msgs, "暂无红包数据🧧")
-		}
-		msgs = append(msgs, fmt.Sprintf("东东农场：%s", <-fruit))
-		msgs = append(msgs, fmt.Sprintf("东东萌宠：%s", <-pet))
-		gn := <-gold
-		if gn >= 30000 {
-			msgs = append(msgs, fmt.Sprintf("极速金币：%d(≈%.2f元)💰", gn, float64(gn)/10000))
-		}
-		zjbn := <-zjb
-		if zjbn >= 50000 {
-			msgs = append(msgs, fmt.Sprintf("京东赚赚：%d金币(≈%.2f元)💰", zjbn, float64(zjbn)/10000))
-		} else {
-			// msgs = append(msgs, fmt.Sprintf("京东赚赚：暂无数据"))
-		}
-		mmcCoin := <-mmc
-		if mmcCoin >= 3000 {
-			msgs = append(msgs, fmt.Sprintf("京东秒杀：%d秒秒币(≈%.2f元)💰", mmcCoin, float64(mmcCoin)/1000))
-		} else {
-			// msgs = append(msgs, fmt.Sprintf("京东秒杀：暂无数据"))
-		}
-		msgs = append(msgs, fmt.Sprintf("京喜工厂：%s", <-dm))
-		if tyt := <-tyt; tyt != "" {
-			msgs = append(msgs, fmt.Sprintf("推一推券：%s", tyt))
-		}
-		if egg := <-egg; egg != 0 {
-			msgs = append(msgs, fmt.Sprintf("惊喜牧场：%d枚鸡蛋🥚", egg))
-		}
-		// if ck.Note != "" {
-		// 	msgs = append([]string{
-		// 		fmt.Sprintf("账号备注：%s", ck.Note),
-		// 	}, msgs...)
-		// }
-		if runtime.GOOS != "darwin" {
-			if ck.Nickname != "" {
-				msgs = append([]string{
-					fmt.Sprintf("账号昵称：%s", ck.Nickname),
-				}, msgs...)
-			}
-		}
-	} else {
-		ck.PtPin, _ = url.QueryUnescape(ck.PtPin)
-		msgs = append(msgs, fmt.Sprintf("京东账号：%s", ck.PtPin))
-		msgs = append(msgs, []string{
-			// "提醒：该账号已过期，请重新登录。多账号的🐑毛党员注意了，登录第2个账号的时候，不可以退出第1个账号，退出会造成账号过期。可以在登录第2个账号前清除浏览器cookie，或者使用浏览器的无痕模式。",
-			"提醒：该账号已过期，请对我说“登录“。”",
-		}...)
-	}
-	ck.PtPin, _ = url.QueryUnescape(ck.PtPin)
-	rt := strings.Join(msgs, "\n")
-	if jd_cookie.GetBool("tuyalize", false) == true {
-
-	}
-	return rt
-}
-
 type BeanDetail struct {
 	Date         string `json:"date"`
 	Amount       string `json:"amount"`
@@ -883,7 +647,7 @@ func getJingBeanBalanceDetail(page int, cookie string) []BeanDetail {
 	req.Header("Host", "api.m.jd.com")
 	req.Header("Content-Type", "application/x-www-form-urlencoded")
 	req.Header("Cookie", cookie)
-	req.SetTimeout(time.Second, time.Second)
+
 	req.Body(fmt.Sprintf(`body={"pageSize": "20", "page": "%d"}&appid=ld`, page))
 	data, err := req.Bytes()
 	if err != nil {
@@ -925,14 +689,18 @@ func redPacket(cookie string, rpc chan []RedList) {
 		Msg     string `json:"msg"`
 	}
 	a := AutoGenerated{}
-	req := httplib.Get(`https://m.jingxi.com/user/info/QueryUserRedEnvelopesV2?type=1&orgFlag=JD_PinGou_New&page=1&cashRedType=1&redBalanceFlag=1&channel=1&_=` + fmt.Sprint(time.Now().Unix()) + `&sceneval=2&g_login_type=1&g_ty=ls`)
+	req := httplib.Get(`https://m.jingxi.com/user/info/QueryUserRedEnvelopesV2?type=1&orgFlag=JD_PinGou_New&page=1&cashRedType=1&redBalanceFlag=1&channel=3&_=` + fmt.Sprint(time.Now().Unix()) + `&sceneval=2&g_login_type=1&g_ty=ls`)
 	req.Header("User-Agent", ua())
-	req.Header("Host", "m.jingxi.com")
-	req.Header("Accept", "*/*")
-	req.Header("Connection", "keep-alive")
-	req.Header("Accept-Language", "zh-cn")
-	req.Header("Accept-Encoding", "gzip, deflate, br")
-	req.Header("Referer", "https://st.jingxi.com/my/redpacket.shtml?newPg=App")
+	req.Header("authority", "m.jingxi.com")
+	req.Header("sec-ch-ua", "\"Not A;Brand\";v=\"99\", \"Chromium\";v=\"96\", \"Google Chrome\";v=\"96\"")
+	req.Header("sec-ch-ua-mobile", "?0")
+	req.Header("sec-ch-ua-platform", "\"macOS\"")
+	req.Header("accept", "*/*")
+	req.Header("sec-fetch-site", "same-site")
+	req.Header("sec-fetch-mode", "no-cors")
+	req.Header("sec-fetch-dest", "script")
+	req.Header("referer", "https://st.jingxi.com/")
+	req.Header("accept-language", "zh-CN,zh;q=0.9,en;q=0.8")
 	req.Header("Cookie", cookie)
 	req.SetTimeout(time.Second, time.Second)
 	data, _ := req.Bytes()
@@ -1076,22 +844,13 @@ func initFarm(cookie string, state chan string) {
 		OldUserSendWater      []string              `json:"oldUserSendWater"`
 	}
 	a := AutoGenerated{}
-	req := httplib.Post(`https://api.m.jd.com/client.action?functionId=initForFarm`)
-	req.Header("accept", "*/*")
-	req.Header("accept-encoding", "gzip, deflate, br")
-	req.Header("accept-language", "zh-CN,zh;q=0.9")
-	req.Header("cache-control", "no-cache")
+	req := httplib.Get(`https://api.m.jd.com/client.action?functionId=initForFarm&appid=wh5&body=` + url.QueryEscape(`{"version":4,"channel":1,"babelChannel":"120"}`))
 	req.Header("cookie", cookie)
-	req.Header("origin", "https://home.m.jd.com")
-	req.Header("pragma", "no-cache")
-	req.Header("referer", "https://home.m.jd.com/myJd/newhome.action")
-	req.Header("sec-fetch-dest", "empty")
-	req.Header("sec-fetch-mode", "cors")
-	req.Header("sec-fetch-site", "same-site")
 	req.Header("User-Agent", ua())
-	req.Header("Content-Type", "application/x-www-form-urlencoded")
-	req.SetTimeout(time.Second, time.Second)
-	req.Body(`body={"version":4}&appid=wh5&clientVersion=9.1.0`)
+	req.SetTimeout(time.Second*10, time.Second*10)
+	if Transport != nil {
+		req.SetTransport(Transport)
+	}
 	data, _ := req.Bytes()
 	json.Unmarshal(data, &a)
 	pt_pin := core.FetchCookieValue("pt_pin", cookie)
@@ -1193,8 +952,11 @@ func initPetTown(cookie string, state chan string) {
 	req.Header("User-Agent", ua())
 	req.Header("cookie", cookie)
 	req.Header("Content-Type", "application/x-www-form-urlencoded")
-	req.SetTimeout(time.Second, time.Second)
+
 	req.Body(`body={}&appid=wh5&loginWQBiz=pet-town&clientVersion=9.0.4`)
+	if Transport != nil {
+		req.SetTransport(Transport)
+	}
 	data, _ := req.Bytes()
 	json.Unmarshal(data, &a)
 	rt := ""
@@ -1264,7 +1026,7 @@ func jsGold(cookie string, state chan int64) { //
 	a := AutoGenerated{}
 	req := httplib.Post(`https://api.m.jd.com?functionId=MyAssetsService.execute&appid=market-task-h5`)
 	req.Header("Accept", "application/json, text/plain, */*")
-	req.Header("Accept-Encoding", "gzip, deflate, br")
+	// req.Header("Accept-Encoding", "gzip, deflate, br")
 	req.Header("Cookie", cookie)
 	req.Header("Content-Type", "application/x-www-form-urlencoded")
 	req.Header("Origin", "https://gold.jd.com")
@@ -1272,7 +1034,7 @@ func jsGold(cookie string, state chan int64) { //
 	req.Header("Connection", "keep-alive")
 	req.Header("User-Agent", ua())
 	req.Header("Referer", "https://gold.jd.com/")
-	req.SetTimeout(time.Second, time.Second)
+
 	req.Body(`functionId=MyAssetsService.execute&body={"method":"goldShopPage","data":{"channel":1}}&_t=` + fmt.Sprint(time.Now().Unix()) + `&appid=market-task-h5;`)
 	data, _ := req.Bytes()
 	json.Unmarshal(data, &a)
@@ -1290,7 +1052,7 @@ func jxncEgg(cookie string, state chan int64) {
 	req.Header("Accept-Language", "zh-cn")
 	req.Header("Accept-Encoding", "gzip, deflate, br")
 	req.Header("Referer", "https://st.jingxi.com/pingou/jxmc/index.html?nativeConfig=%7B%22immersion%22%3A1%2C%22toColor%22%3A%22%23e62e0f%22%7D&;__mcwvt=sjcp&ptag=7155.9.95")
-	req.SetTimeout(time.Second, time.Second)
+
 	req.Header("Cookie", cookie)
 	data, _ := req.Bytes()
 
@@ -1388,7 +1150,7 @@ func tytCoupon(cookie string, state chan string) {
 
 	req.Header("User-Agent", ua())
 	req.Header("Referer", "https://st.jingxi.com/my/coupon/jx.shtml?sceneval=2&ptag=7155.1.18")
-	req.SetTimeout(time.Second, time.Second)
+
 	data, _ := req.Bytes()
 	res := regexp.MustCompile(`jsonpCBKB[(](.*)\s+[)];}catch`).FindSubmatch(data)
 	rt := ""
@@ -1428,7 +1190,7 @@ func mmCoin(cookie string, state chan int64) {
 	req.Header("User-Agent", ua())
 	req.Header("cookie", cookie)
 	req.Header("Content-Type", "application/x-www-form-urlencoded")
-	req.SetTimeout(time.Second, time.Second)
+
 	req.Body(`uuid=3245ad3d16ab2153c69f9ca91cd2e931b06a3bb8&clientVersion=10.1.0&client=wh5&osVersion=&area=&networkType=wifi&functionId=homePageV2&body=%7B%7D&appid=SecKill2020`)
 	data, _ := req.Bytes()
 	mmc, _ := jsonparser.GetInt(data, "result", "assignment", "assignmentPoints")
@@ -1436,15 +1198,15 @@ func mmCoin(cookie string, state chan int64) {
 }
 
 func jdzz(cookie string, state chan int64) { //
-	req := httplib.Get(`https://api.m.jd.com/client.action?functionId=interactTaskIndex&body={}&client=wh5&clientVersion=9.1.0`)
+	req := httplib.Post(`https://api.m.jd.com/client.action?functionId=interactTaskIndex&body={}&client=wh5&clientVersion=9.1.0`)
 	req.Header("Host", "api.m.jd.com")
 	req.Header("Accept-Language", "zh-cn")
-	req.Header("Accept-Encoding", "gzip, deflate, br")
+	// req.Header("Accept-Encoding", "gzip, deflate, br")
 	req.Header("Referer", "http://wq.jd.com/wxapp/pages/hd-interaction/index/index")
 	req.Header("User-Agent", ua())
 	req.Header("cookie", cookie)
 	req.Header("Content-Type", "application/json")
-	req.SetTimeout(time.Second, time.Second)
+
 	data, _ := req.Bytes()
 	mmc, _ := jsonparser.GetString(data, "data", "totalNum")
 	state <- int64(Int(mmc))
@@ -1458,15 +1220,17 @@ func (ck *JdCookie) Available() bool {
 	if ck == nil {
 		return true
 	}
-	req := httplib.Get("https://me-api.jd.com/user_new/info/GetJDUserInfoUnion")
+	req := httplib.Get("https://me-api.jd.com/user_new/info/GetJDUserInfoUnion?orgFlag=JD_PinGou_New&callSource=mainorder&channel=4&isHomewhite=0&sceneval=2&_=" + fmt.Sprint(time.Now().Unix()) + "&sceneval=2&g_login_type=1&g_ty=ls")
 	req.Header("Cookie", cookie)
-	req.Header("Accept", "*/*")
-	req.Header("Accept-Language", "zh-cn,")
-	req.Header("Connection", "keep-alive,")
-	req.Header("Referer", "https://home.m.jd.com/myJd/newhome.action?sceneval=2&ufc=&")
-	req.Header("Host", "me-api.jd.com")
+	req.Header("authority", "me-api.jd.com")
+	req.Header("accept", "*/*")
+	req.Header("sec-fetch-site", "same-site")
+	req.Header("sec-fetch-mode", "no-cors")
+	req.Header("sec-fetch-dest", "script")
+	req.Header("referer", "https://home.m.jd.com/")
+	req.Header("accept-language", "zh-CN,zh;q=0.9,en;q=0.8")
 	req.Header("User-Agent", ua())
-	req.SetTimeout(time.Second, time.Second)
+
 	data, err := req.Bytes()
 	if err != nil {
 		return av2(ck)
@@ -1477,7 +1241,7 @@ func (ck *JdCookie) Available() bool {
 	}
 	switch ui.Retcode {
 	// case "1001": //ck.BeanNum
-	// 	if ui.Msg == "not login" {
+	// 	if ui.Msg == "not login"{
 	// 		return false
 	// 	}
 	case "0":
@@ -1510,7 +1274,7 @@ func av2(ck *JdCookie) bool {
 	req.Header("Accept-Encoding", "gzip, deflate, br")
 	req.Header("Referer", "https://st.jingxi.com/my/userinfo.html?&ptag=7205.12.4")
 	req.Header("Cookie", "pt_key="+ck.PtKey+";pt_pin="+ck.PtPin+";")
-	req.SetTimeout(time.Second, time.Second)
+
 	data, err := req.Bytes()
 	if err != nil {
 		return true
@@ -1528,7 +1292,7 @@ func av3(ck *JdCookie) bool {
 	req.Header("Accept-Language", "zh-cn")
 	req.Header("Accept-Encoding", "gzip, deflate, br")
 	req.Header("Referer", "https://home.m.jd.com/myJd/newhome.action?sceneval=2&ufc=&")
-	req.SetTimeout(time.Second, time.Second)
+
 	req.Header("Cookie", "pt_key="+ck.PtKey+";pt_pin="+ck.PtPin+";")
 	data, err := req.Bytes()
 	if err != nil {
@@ -1756,20 +1520,19 @@ func queryuserjingdoudetail(cookie string, e下水道 chan []int) {
 		Retmsg string        `json:"retmsg"`
 	}
 	a := AutoGenerated{}
-	req := httplib.Get(`https://m.jingxi.com/activeapi/queryuserjingdoudetail?pagesize=10&type=16&sceneval=2`)
-	req.Header("User-Agent", "jdpingou;"+ua())
-	req.Header("Host", "m.jingxi.com")
-	req.Header("Accept", "*/*")
-	req.Header("Connection", "keep-alive")
-	req.Header("Accept-Language", "zh-cn")
-	req.Header("Referer", "https://st.jingxi.com/sns/202105/31/xi_bean/index.html?nativeConfig=%7B%22immersion%22%3A%221%22%2C%20%22layoutUnderNavi%22%3A%220%22%2C%20%22showTitle%22%3A%221%22%2C%20%22toColor%22%3A%20%22%23f84b3b%22%7D")
-	req.Header("Accept-Encoding", "gzip, deflate, br")
+	req := httplib.Get(`https://m.jingxi.com/activeapi/queryuserjingdoudetail?pagesize=10&type=16&_=` + fmt.Sprint(time.Now().Unix()) + `&sceneval=2&g_login_type=1&g_ty=ls`)
+	req.Header("User-Agent", ua())
 	req.Header("Cookie", cookie)
-	req.SetTimeout(time.Second, time.Second)
-	data, err := req.Bytes()
-	if err != nil {
-		return
-	}
+	req.Header("authority", "m.jingxi.com")
+	req.Header("accept", "*/*")
+	req.Header("sec-fetch-site", "same-site")
+	req.Header("sec-fetch-mode", "no-cors")
+	req.Header("sec-fetch-dest", "script")
+	req.Header("referer", "https://st.jingxi.com/")
+	req.Header("accept-language", "zh-CN,zh;q=0.9,en;q=0.8")
+
+	data, _ := req.Bytes()
+
 	json.Unmarshal(data, &a)
 	e叼毛 := []int{0, 0, 0, 0, 0}
 	today := time.Now().Local().Format("2006/01/02")
@@ -1790,6 +1553,32 @@ func queryuserjingdoudetail(cookie string, e下水道 chan []int) {
 			}
 		}
 	}
+	e下水道 <- e叼毛 //叼毛去下水道
+}
+
+//欢迎叼毛来抄代码
+func jingtie(cookie string, e下水道 chan string) {
+	req := httplib.Post(`https://ms.jr.jd.com/gw/generic/jrm/h5/m/channelUserSubsidyInfo`)
+	req.Header("User-Agent", ua())
+	req.Header("Cookie", cookie)
+	req.Body(`"reqData=%7B%22source%22%3A%22H5%22%2C%22channel%22%3A%22default%22%2C%22channelLv%22%3A%22%22%2C%22apiVersion%22%3A%224.0.0%22%2C%22riskDeviceParam%22%3A%22%7B%5C%22macAddress%5C%22%3A%5C%22%5C%22%2C%5C%22imei%5C%22%3A%5C%22%5C%22%2C%5C%22eid%5C%22%3A%5C%22%5C%22%2C%5C%22openUUID%5C%22%3A%5C%22%5C%22%2C%5C%22uuid%5C%22%3A%5C%22%5C%22%2C%5C%22traceIp%5C%22%3A%5C%22%5C%22%2C%5C%22os%5C%22%3A%5C%22%5C%22%2C%5C%22osVersion%5C%22%3A%5C%22%5C%22%2C%5C%22appId%5C%22%3A%5C%22%5C%22%2C%5C%22clientVersion%5C%22%3A%5C%22%5C%22%2C%5C%22resolution%5C%22%3A%5C%22%5C%22%2C%5C%22channelInfo%5C%22%3A%5C%22%5C%22%2C%5C%22networkType%5C%22%3A%5C%22%5C%22%2C%5C%22startNo%5C%22%3A42%2C%5C%22openid%5C%22%3A%5C%22%5C%22%2C%5C%22token%5C%22%3A%5C%22%5C%22%2C%5C%22sid%5C%22%3A%5C%22%5C%22%2C%5C%22terminalType%5C%22%3A%5C%22%5C%22%2C%5C%22longtitude%5C%22%3A%5C%22%5C%22%2C%5C%22latitude%5C%22%3A%5C%22%5C%22%2C%5C%22securityData%5C%22%3A%5C%22%5C%22%2C%5C%22jscContent%5C%22%3A%5C%22%5C%22%2C%5C%22fnHttpHead%5C%22%3A%5C%22%5C%22%2C%5C%22receiveRequestTime%5C%22%3A%5C%22%5C%22%2C%5C%22port%5C%22%3A80%2C%5C%22appType%5C%22%3A%5C%22%5C%22%2C%5C%22deviceType%5C%22%3A%5C%22%5C%22%2C%5C%22fp%5C%22%3A%5C%22%5C%22%2C%5C%22ip%5C%22%3A%5C%22%5C%22%2C%5C%22idfa%5C%22%3A%5C%22%5C%22%2C%5C%22sdkToken%5C%22%3A%5C%22%5C%22%7D%22%2C%22others%22%3A%7B%22shareId%22%3A%22%22%7D%7D"`)
+	data, _ := req.String()
+	e叼毛 := ""
+	res := regexp.MustCompile(`"availableAmount":([^,]+),`).FindStringSubmatch(data)
+	if len(res) > 0 {
+		e叼毛 = res[1]
+	}
+	e下水道 <- e叼毛 //叼毛去下水道
+}
+
+//欢迎叼毛来抄代码
+func jingxiangzhi(cookie string, e下水道 chan string) {
+	req := httplib.Get(`https://wxapp.m.jd.com/kwxhome/myJd/home.json?&useGuideModule=0&bizId=&brandId=&fromType=wxapp&timestamp=` + fmt.Sprint(time.Now().Unix()))
+	req.Header("User-Agent", ua())
+	req.Header("Cookie", cookie)
+	data, _ := req.Bytes()
+	e叼毛, _ := jsonparser.GetString(data, "user", "uclass")
+	e叼毛 = strings.Replace(e叼毛, "京享值", "", -1)
 	e下水道 <- e叼毛 //叼毛去下水道
 }
 
@@ -1948,7 +1737,7 @@ func dream(cookie string, state chan string) {
 	req.Header("Accept-Language", "zh-cn")
 	req.Header("Referer", "https://st.jingxi.com/pingou/dream_factory/index.html?ptag=7155.9.46")
 	req.Header("Accept-Encoding", "gzip, deflate, br")
-	req.SetTimeout(time.Second, time.Second)
+
 	data, _ := req.Bytes()
 	a := &AutoGenerated{}
 	json.Unmarshal(data, a)
@@ -1987,4 +1776,104 @@ func dream(cookie string, state chan string) {
 	if not {
 		a叉哦叉哦(core.FetchCookieValue("pt_pin", cookie), "京喜工厂", desc)
 	}
+}
+
+func jdsy(cookie string, desc chan string) {
+	type AutoGenerated struct {
+		Success bool        `json:"success"`
+		Code    interface{} `json:"code"`
+		BsCode  interface{} `json:"bsCode"`
+		Message interface{} `json:"message"`
+		Data    struct {
+			List []struct {
+				ActID     int         `json:"actId"`
+				ReportID  interface{} `json:"reportId"`
+				OrderID   interface{} `json:"orderId"`
+				ApplyTime int64       `json:"applyTime"`
+				Status    int         `json:"status"`
+				TrialImg  string      `json:"trialImg"`
+				TrialName string      `json:"trialName"`
+				Text      struct {
+					ID   int    `json:"id"`
+					Text string `json:"text"`
+				} `json:"text"`
+				LeftTime      int `json:"leftTime"`
+				TryButtonList []struct {
+					ID     int         `json:"id"`
+					Text   string      `json:"text"`
+					Schema interface{} `json:"schema"`
+				} `json:"tryButtonList"`
+				Bottom           interface{}   `json:"bottom"`
+				ActType          int           `json:"actType"`
+				TaskType         int           `json:"taskType"`
+				SkuID            string        `json:"skuId"`
+				OrderState       interface{}   `json:"orderState"`
+				Tag              []interface{} `json:"tag"`
+				OrderAmount      interface{}   `json:"orderAmount"`
+				EndTime          int64         `json:"endTime"`
+				SupplierDelivery bool          `json:"supplierDelivery"`
+			} `json:"list"`
+			PageSize int   `json:"pageSize"`
+			Page     int   `json:"page"`
+			SysDate  int64 `json:"sysDate"`
+		} `json:"data"`
+	}
+	rt := ""
+	warn := make(chan string)
+	go func() {
+		req := httplib.Post("https://api.m.jd.com/client.action")
+		req.Header("Host", "api.m.jd.com")
+		req.Header("Content-Type", "application/x-www-form-urlencoded")
+		req.Header("Origin", "https://prodev.m.jd.com")
+		// req.Header("Accept-Encoding", "gzip, deflate, br")
+		req.Header("Cookie", cookie)
+		req.Header("Connection", "keep-alive")
+		req.Header("Accept", "application/json, text/plain, */*")
+		req.Header("User-Agent", ua())
+		// req.Header("Referer", "https://prodev.m.jd.com/mall/active/2Y2YgUu1Xbbv8AfN7TAHhNqfQrAV/index.html?tttparams=eliIVi1eyJncHNfYXJlYSI6IjEyXzkzOV8yMzY4M181NjE4NCIsInByc3RhdGUiOiIwIiwidW5fYXJlYSI6IjEyXzkzOV8yMzY4M181NjE4NCIsIm1vZGVsIjoiaVBob25lMTAsMiIsImdMYXQiOiIzMy4yOTQ5MyIsImdMbmciOiIxMjAuMTQ4MjMyIiwibG5nIjoiMTIwLjE1MDMyMyIsImxhdCI6IjMzLjI5NTUzNi7J9&sid=a2e1c9b3b215a2337517cd01f2e04cbw&un_area=12_939_23683_56184")
+		// req.Header("Content-Length", "332")
+		// req.Header("Accept-Language", "zh-cn")
+		req.Body(`appid=newtry&functionId=try_MyTrials&uuid=3345ad3d16ab2153c69f8ca91cd3e931b06a3bb8&clientVersion=10.2.7&client=wh5&osVersion=14.7.1&area=12_939_23683_56184&networkType=wifi&body=%7B%22geo%22%3A%7B%22lng%22%3A121.15326252577907%2C%22lat%22%3A34.295611038697575%7D%2C%22page%22%3A1%2C%22selected%22%3A2%2C%22previewTime%22%3A%22%22%7D`)
+		//appid=newtry&functionId=try_MyTrials&uuid=3345ad3d16ab2153c69f8ca91cd3e931b06a3bb8&clientVersion=10.2.7&client=wh5&osVersion=14.7.1&area=12_939_23683_56184&networkType=wifi&body=%7B%22geo%22%3A%7B%22lng%22%3A121.15326252577907%2C%22lat%22%3A34.295611038697575%7D%2C%22page%22%3A1%2C%22selected%22%3A1%2C%22previewTime%22%3A%22%22%7D
+		data, _ := req.Bytes()
+		// fmt.Println(string(data))
+		a := &AutoGenerated{}
+		json.Unmarshal(data, a)
+		// fmt.Println(a)
+		for _, v := range a.Data.List {
+			if len(v.TryButtonList) == 2 {
+				if v.TryButtonList[0].ID <= 2 {
+					warn <- "你有一个商品待领取，详情：" + v.TrialName + "👆"
+					return
+				}
+			}
+		}
+		warn <- ""
+	}()
+	if rt == "" {
+		req := httplib.Post("https://api.m.jd.com/client.action")
+		req.Header("Host", "api.m.jd.com")
+		req.Header("Content-Type", "application/x-www-form-urlencoded")
+		req.Header("Origin", "https://prodev.m.jd.com")
+		// req.Header("Accept-Encoding", "gzip, deflate, br")
+		req.Header("Cookie", cookie)
+		req.Header("Connection", "keep-alive")
+		req.Header("Accept", "application/json, text/plain, */*")
+		req.Header("User-Agent", ua())
+		// req.Header("Referer", "https://prodev.m.jd.com/mall/active/2Y2YgUu1Xbbv8AfN7TAHhNqfQrAV/index.html?tttparams=eliIVi1eyJncHNfYXJlYSI6IjEyXzkzOV8yMzY4M181NjE4NCIsInByc3RhdGUiOiIwIiwidW5fYXJlYSI6IjEyXzkzOV8yMzY4M181NjE4NCIsIm1vZGVsIjoiaVBob25lMTAsMiIsImdMYXQiOiIzMy4yOTQ5MyIsImdMbmciOiIxMjAuMTQ4MjMyIiwibG5nIjoiMTIwLjE1MDMyMyIsImxhdCI6IjMzLjI5NTUzNi7J9&sid=a2e1c9b3b215a2337517cd01f2e04cbw&un_area=12_939_23683_56184")
+		// req.Header("Content-Length", "332")
+		// req.Header("Accept-Language", "zh-cn")
+		req.Body(`appid=newtry&functionId=try_MyTrials&uuid=3345ad3d16ab2153c69f8ca91cd3e931b06a3bb8&clientVersion=10.2.7&client=wh5&osVersion=14.7.1&area=12_939_23683_56184&networkType=wifi&body=%7B%22geo%22%3A%7B%22lng%22%3A121.15326252577907%2C%22lat%22%3A34.295611038697575%7D%2C%22page%22%3A1%2C%22selected%22%3A1%2C%22previewTime%22%3A%22%22%7D`)
+
+		data, _ := req.Bytes()
+		// fmt.Println(string(data))
+		a := &AutoGenerated{}
+		json.Unmarshal(data, a)
+		// fmt.Println(a)
+		rt = fmt.Sprintf("%d件商品申请中", len(a.Data.List))
+	}
+	if xx := <-warn; xx != "" {
+		rt = xx
+	}
+	desc <- rt
 }
