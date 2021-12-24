@@ -24,6 +24,7 @@ type JdNotify struct {
 	PtKey        string
 	AssetCron    string
 	PushPlus     string
+	LoginedAt    time.Time
 }
 
 var cc *cron.Cron
@@ -36,7 +37,20 @@ func assetPush(pt_pin string) {
 	}
 	jdNotify.First(jn)
 	if jn.PushPlus != "" {
-		pushpluspush("资产变动通知", GetAsset(&JdCookie{
+		// tail := ""
+		head := ""
+
+		days, hours, minutes, seconds := getDifference(jn.LoginedAt, time.Now())
+		if days < 1000 {
+			head = fmt.Sprintf("登录时长：%d天%d时%d分%d秒", days, hours, minutes, seconds)
+			if days > 25 {
+				head += "\n⚠️⚠️⚠️账号即将过期，请登录。\n\n"
+			} else {
+				head += "\n\n"
+			}
+		}
+
+		pushpluspush("资产变动通知", head+GetAsset(&JdCookie{
 			PtPin: pt_pin,
 			PtKey: jn.PtKey,
 		}), jn.PushPlus)
@@ -205,7 +219,7 @@ func initNotify() {
 						ID: pt_pin,
 					}
 					jdNotify.First(jn)
-					ask := "请在20秒内选择操作：\n1. 查询账号资产\n"
+					ask := "请在20秒内选择操作：\n1. 推送账号资产\n"
 
 					if jn.Note == "" {
 						ask += "2. 添加账户备注信息\n"
@@ -246,10 +260,8 @@ func initNotify() {
 							if jn.PtKey == "" {
 								return "账号已过期，暂时无法查询。"
 							}
-							return GetAsset(&JdCookie{
-								PtPin: pt_pin,
-								PtKey: jn.PtKey,
-							})
+							assetPush(jn.ID)
+							return "推送完成，请查收。"
 						case 2:
 							s.Reply("请输入新的账号备注信息：")
 							jn.Note = s.Await(s, nil).(string)
@@ -303,7 +315,7 @@ func initNotify() {
 								}
 								ck = rsp.Header.Get("Set-Cookie")
 								if ck != "" {
-									fmt.Println(ck)
+									// fmt.Println(ck)
 									break
 								}
 							}
@@ -312,10 +324,7 @@ func initNotify() {
 							data, _ = req.Bytes()
 							jn.PushPlus, _ = jsonparser.GetString(data, "data")
 							s.Reply("扫码成功，将尝试为你推送资产信息。")
-							pushpluspush("资产推送通知", GetAsset(&JdCookie{
-								PtPin: jn.ID,
-								PtKey: jn.PtKey,
-							}), jn.PushPlus)
+							assetPush(jn.ID)
 						case 9:
 							return "已退出会话。"
 						}
@@ -372,8 +381,8 @@ func (ck *JdCookie) QueryAsset() string {
 	}
 	asset := Asset{}
 	if ck.Available() {
-		msgs = append(msgs, fmt.Sprintf("用户等级：%v", ck.UserLevel))
-		msgs = append(msgs, fmt.Sprintf("等级名称：%v", ck.LevelName))
+		// msgs = append(msgs, fmt.Sprintf("用户等级：%v", ck.UserLevel))
+		// msgs = append(msgs, fmt.Sprintf("等级名称：%v", ck.LevelName))
 		cookie := fmt.Sprintf("pt_key=%s;pt_pin=%s;", ck.PtKey, ck.PtPin)
 		var rpc = make(chan []RedList)
 		var fruit = make(chan string)
@@ -385,10 +394,11 @@ func (ck *JdCookie) QueryAsset() string {
 		var mmc = make(chan int64)
 		var zjb = make(chan int64)
 		var xdm = make(chan []int)
-		var jxz = make(chan string)
+		// var jxz = make(chan string)
 		var jrjt = make(chan string)
 		var sysp = make(chan string)
-		go jingxiangzhi(cookie, jxz)
+		var wwjf = make(chan int)
+		// go jingxiangzhi(cookie, jxz)
 		go queryuserjingdoudetail(cookie, xdm)
 		go dream(cookie, dm)
 		go redPacket(cookie, rpc)
@@ -401,7 +411,8 @@ func (ck *JdCookie) QueryAsset() string {
 		go jdzz(cookie, zjb)
 		go jingtie(cookie, jrjt)
 		go jdsy(cookie, sysp)
-		msgs = append(msgs, fmt.Sprintf("京享值：%v", <-jxz))
+		go cwwjf(cookie, wwjf)
+		// msgs = append(msgs, fmt.Sprintf("京享值：%v", <-jxz))
 		today := time.Now().Local().Format("2006-01-02")
 		yestoday := time.Now().Local().Add(-time.Hour * 24).Format("2006-01-02")
 		page := 1
@@ -577,13 +588,15 @@ func (ck *JdCookie) QueryAsset() string {
 		// } else {
 		// msgs = append(msgs, fmt.Sprintf("京东秒杀：暂无数据"))
 		// }
+
+		msgs = append(msgs, fmt.Sprintf("宠汪汪：%d积分", <-wwjf))
 		msgs = append(msgs, fmt.Sprintf("京喜工厂：%s", <-dm))
-		if tyt := <-tyt; tyt != "" {
-			msgs = append(msgs, fmt.Sprintf("推一推券：%s", tyt))
-		}
-		if egg := <-egg; egg != 0 {
-			msgs = append(msgs, fmt.Sprintf("惊喜牧场：%d枚鸡蛋🥚", egg))
-		}
+		// if tyt := ; tyt != "" {
+		msgs = append(msgs, fmt.Sprintf("推一推：%s", <-tyt))
+		// }
+		// if egg := ; egg != 0 {
+		msgs = append(msgs, fmt.Sprintf("惊喜牧场：%d枚鸡蛋🥚", <-egg))
+		// }
 		// if ck.Note != "" {
 		// 	msgs = append([]string{
 		// 		fmt.Sprintf("账号备注：%s", ck.Note),
