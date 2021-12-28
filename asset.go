@@ -1342,7 +1342,6 @@ func av2(ck *JdCookie) bool {
 	req.Header("Accept", "*/*")
 	req.Header("Connection", "keep-alive")
 	req.Header("Accept-Language", "zh-cn")
-	// req.Header("Accept-Encoding", "gzip, deflate, br")
 	req.Header("Referer", "https://st.jingxi.com/my/userinfo.html?&ptag=7205.12.4")
 	req.Header("Cookie", "pt_key="+ck.PtKey+";pt_pin="+ck.PtPin+";")
 
@@ -1361,7 +1360,6 @@ func av3(ck *JdCookie) bool {
 	req.Header("Accept", "*/*")
 	req.Header("Connection", "keep-alive")
 	req.Header("Accept-Language", "zh-cn")
-	req.Header("Accept-Encoding", "gzip, deflate, br")
 	req.Header("Referer", "https://home.m.jd.com/myJd/newhome.action?sceneval=2&ufc=&")
 
 	req.Header("Cookie", "pt_key="+ck.PtKey+";pt_pin="+ck.PtPin+";")
@@ -1595,7 +1593,7 @@ func queryuserjingdoudetail(cookie string, e下水道 chan []int) {
 	req.Header("User-Agent", ua())
 	req.Header("Cookie", cookie)
 	req.Header("authority", "m.jingxi.com")
-	// req.Header("accept", "*/*")
+	req.Header("accept", "*/*")
 	req.Header("sec-fetch-site", "same-site")
 	req.Header("sec-fetch-mode", "no-cors")
 	req.Header("sec-fetch-dest", "script")
@@ -1824,9 +1822,9 @@ func dream(cookie string, state chan string) {
 			if production.ExchangeStatus == 1 {
 				desc = "可以兑换商品了"
 			}
-			if production.ExchangeStatus == 3 {
-				desc = "商品兑换已超时，请选择新商品进行制造"
-			}
+			// if production.ExchangeStatus == 3 {
+			// 	desc = "商品兑换已超时，请选择新商品进行制造"
+			// }
 			// await exchangeProNotify()
 		} else {
 			not = false
@@ -1834,11 +1832,11 @@ func dream(cookie string, state chan string) {
 
 		}
 	} else {
-		if len(a.Data.FactoryList) == 0 {
-			desc = "请手动开启活动"
-		} else if len(a.Data.ProductionList) == 0 {
-			desc = "请手动选购商品进行生产"
-		}
+		// if len(a.Data.FactoryList) == 0 {
+		// 	desc = "请手动开启活动"
+		// } else if len(a.Data.ProductionList) == 0 {
+		// 	desc = "请手动选购商品进行生产"
+		// }
 	}
 	desc += "🏭"
 	if state != nil {
