@@ -161,7 +161,11 @@ func initAsset() {
 				if a == "300" {
 					a = "3"
 				}
-				envs, err := qinglong.GetEnvs("JD_COOKIE")
+				err, qls := qinglong.QinglongSC(s)
+				if err != nil {
+					return err
+				}
+				envs, err := GetEnvs(qls[0], "JD_COOKIE")
 				if err != nil {
 					return err
 				}
@@ -186,7 +190,6 @@ func initAsset() {
 				}
 				ke := core.Bucket("wxmp").GetBool("isKe?", false)
 				if s.GetImType() == "wxmp" && !ke {
-
 					if len(cks) <= 2 {
 						cs := []chan string{}
 						for _, ck := range cks {
@@ -207,7 +210,7 @@ func initAsset() {
 								})
 							}
 						}()
-						return "您有多个账号，输入任意字符将依次为您展示查询结果："
+						return "您有多个账号，输入任意字符将依次为您展示查询结果(公众号查询可能失败，请多试几次)："
 					}
 
 				} else {
@@ -223,41 +226,76 @@ func initAsset() {
 			Cron:  jd_cookie.Get("asset_push"),
 			Admin: true,
 			Handle: func(_ core.Sender) interface{} {
-				envs, _ := qinglong.GetEnvs("JD_COOKIE")
 				qqGroup := jd_cookie.GetInt("qqGroup")
-				for _, env := range envs {
-					if env.Status != 0 {
-						continue
-					}
-					pt_pin := core.FetchCookieValue(env.Value, "pt_pin")
-					pt_key := core.FetchCookieValue(env.Value, "pt_key")
-					for _, tp := range []string{
-						"qq", "tg", "wx",
-					} {
-						var fs []func()
-						core.Bucket("pin" + strings.ToUpper(tp)).Foreach(func(k, v []byte) error {
-							if string(k) == pt_pin && pt_pin != "" {
-								if push, ok := core.Pushs[tp]; ok {
-									fs = append(fs, func() {
-										push(string(v), GetAsset(&JdCookie{
-											PtPin: pt_pin,
-											PtKey: pt_key,
-										}), qqGroup, "")
-									})
-								}
+				for _, tp := range []string{
+					"qq", "tg", "wx",
+				} {
+					var fs []func()
+					core.Bucket("pin" + strings.ToUpper(tp)).Foreach(func(k, v []byte) error {
+						if string(k) != "" {
+							jn := &JdNotify{
+								ID: string(k),
 							}
-							return nil
-						})
-						if len(fs) != 0 {
-							for _, f := range fs {
-								f()
+							jdNotify.First(jn)
+							if push, ok := core.Pushs[tp]; ok {
+								fs = append(fs, func() {
+									push(string(v), GetAsset(&JdCookie{
+										PtPin: jn.ID,
+										PtKey: jn.PtKey,
+									}), qqGroup, "")
+								})
 							}
 						}
-						time.Sleep(time.Second)
+						return nil
+					})
+					if len(fs) != 0 {
+						for _, f := range fs {
+							f()
+						}
 					}
-
+					time.Sleep(time.Second)
 				}
+
 				return "推送完成"
+			},
+		},
+		{
+			Rules: []string{`myCookie`},
+			Cron:  jd_cookie.Get("asset_push"),
+			Handle: func(s core.Sender) interface{} {
+				cookies := []string{}
+				tp := s.GetImType()
+				uid := s.GetUserID()
+
+				core.Bucket("pin" + strings.ToUpper(tp)).Foreach(func(k, v []byte) error {
+					if string(k) != "" && string(v) == uid {
+						jn := &JdNotify{
+							ID: string(k),
+						}
+						jdNotify.First(jn)
+						cookies = append(cookies, fmt.Sprintf("pt_key=%s;pt_pin=%s;", jn.PtKey, jn.ID))
+					}
+					return nil
+				})
+
+				s.Reply(fmt.Sprintf("已为你找到%d条结果，请在60秒内回复“n”，将依次为你展示。", len(cookies)))
+				var ids = []string{}
+				for i := range cookies {
+					if s.Await(s, func(s core.Sender) interface{} {
+						s.RecallMessage(s.GetMessageID())
+						return nil
+					}, time.Second*60) != "n" {
+						return "操作中断。"
+					}
+					if len(ids) > 0 {
+						s.RecallMessage(ids)
+					}
+					ids, _ = s.Reply(cookies[i])
+				}
+				if len(ids) > 0 {
+					s.RecallMessage(ids)
+				}
+				return "操作完成。"
 			},
 		},
 		{
@@ -303,31 +341,21 @@ func initAsset() {
 					}
 				}
 				s.Disappear(time.Second * 40)
-				envs, err := qinglong.GetEnvs("JD_COOKIE")
-				if err != nil {
-					return err
-				}
-				if len(envs) == 0 {
-					return "暂时无法查询。"
-				}
 				cks := []JdCookie{}
-				for _, env := range envs {
-					pt_key := FetchJdCookieValue("pt_key", env.Value)
-					if env.Status != 0 {
-						pt_key = ""
-					}
-					pt_pin := FetchJdCookieValue("pt_pin", env.Value)
-					pin(s.GetImType()).Foreach(func(k, v []byte) error {
-						if string(k) == pt_pin && string(v) == fmt.Sprint(s.GetUserID()) {
-							cks = append(cks, JdCookie{
-								PtKey: pt_key,
-								PtPin: pt_pin,
-								Note:  env.Remarks,
-							})
+				pin(s.GetImType()).Foreach(func(k, v []byte) error {
+					if string(v) == fmt.Sprint(s.GetUserID()) {
+						jn := &JdNotify{
+							ID: string(k),
 						}
-						return nil
-					})
-				}
+						jdNotify.First(jn)
+						cks = append(cks, JdCookie{
+							PtKey: jn.PtKey,
+							PtPin: string(k),
+						})
+					}
+					return nil
+				})
+
 				if len(cks) == 0 {
 					return "你尚未绑定🐶东账号，请私聊我你的账号信息或者对我说“登录”。"
 				}
@@ -362,88 +390,88 @@ func initAsset() {
 				return nil
 			},
 		},
-		{
-			Rules: []string{`today bean(?)`},
-			Admin: true,
-			Handle: func(s core.Sender) interface{} {
-				a := s.Get()
-				envs, err := qinglong.GetEnvs("JD_COOKIE")
-				if err != nil {
-					return err
-				}
-				if len(envs) == 0 {
-					return "青龙没有京东账号。"
-				}
-				cks := []JdCookie{}
-				for _, env := range envs {
-					pt_key := FetchJdCookieValue("pt_key", env.Value)
-					pt_pin := FetchJdCookieValue("pt_pin", env.Value)
-					if pt_key != "" && pt_pin != "" {
-						cks = append(cks, JdCookie{
-							PtKey: pt_key,
-							PtPin: pt_pin,
-							Note:  env.Remarks,
-						})
-					}
-				}
-				cks = LimitJdCookie(cks, a)
-				if len(cks) == 0 {
-					return "没有匹配的京东账号。"
-				}
-				var beans []chan int
-				for _, ck := range cks {
-					var bean = make(chan int)
-					go GetTodayBean(&ck, bean)
-					beans = append(beans, bean)
-				}
-				all := 0
-				for i := range beans {
-					all += <-beans[i]
-				}
-				return fmt.Sprintf("今日收入%d京豆。", all)
-			},
-		},
-		{
-			Rules: []string{`yestoday bean(?)`},
-			Admin: true,
-			Handle: func(s core.Sender) interface{} {
-				a := s.Get()
-				envs, err := qinglong.GetEnvs("JD_COOKIE")
-				if err != nil {
-					return err
-				}
-				if len(envs) == 0 {
-					return "青龙没有京东账号。"
-				}
-				cks := []JdCookie{}
-				for _, env := range envs {
-					pt_key := FetchJdCookieValue("pt_key", env.Value)
-					pt_pin := FetchJdCookieValue("pt_pin", env.Value)
-					if pt_key != "" && pt_pin != "" {
-						cks = append(cks, JdCookie{
-							PtKey: pt_key,
-							PtPin: pt_pin,
-							Note:  env.Remarks,
-						})
-					}
-				}
-				cks = LimitJdCookie(cks, a)
-				if len(cks) == 0 {
-					return "没有匹配的京东账号。"
-				}
-				var beans []chan int
-				for _, ck := range cks {
-					var bean = make(chan int)
-					go GetYestodayBean(&ck, bean)
-					beans = append(beans, bean)
-				}
-				all := 0
-				for i := range beans {
-					all += <-beans[i]
-				}
-				return fmt.Sprintf("昨日收入%d京豆。", all)
-			},
-		},
+		// {
+		// 	Rules: []string{`today bean(?)`},
+		// 	Admin: true,
+		// 	Handle: func(s core.Sender) interface{} {
+		// 		a := s.Get()
+		// 		envs, err := GetEnvs("JD_COOKIE")
+		// 		if err != nil {
+		// 			return err
+		// 		}
+		// 		if len(envs) == 0 {
+		// 			return "青龙没有京东账号。"
+		// 		}
+		// 		cks := []JdCookie{}
+		// 		for _, env := range envs {
+		// 			pt_key := FetchJdCookieValue("pt_key", env.Value)
+		// 			pt_pin := FetchJdCookieValue("pt_pin", env.Value)
+		// 			if pt_key != "" && pt_pin != "" {
+		// 				cks = append(cks, JdCookie{
+		// 					PtKey: pt_key,
+		// 					PtPin: pt_pin,
+		// 					Note:  env.Remarks,
+		// 				})
+		// 			}
+		// 		}
+		// 		cks = LimitJdCookie(cks, a)
+		// 		if len(cks) == 0 {
+		// 			return "没有匹配的京东账号。"
+		// 		}
+		// 		var beans []chan int
+		// 		for _, ck := range cks {
+		// 			var bean = make(chan int)
+		// 			go GetTodayBean(&ck, bean)
+		// 			beans = append(beans, bean)
+		// 		}
+		// 		all := 0
+		// 		for i := range beans {
+		// 			all += <-beans[i]
+		// 		}
+		// 		return fmt.Sprintf("今日收入%d京豆。", all)
+		// 	},
+		// },
+		// {
+		// 	Rules: []string{`yestoday bean(?)`},
+		// 	Admin: true,
+		// 	Handle: func(s core.Sender) interface{} {
+		// 		a := s.Get()
+		// 		envs, err := GetEnvs("JD_COOKIE")
+		// 		if err != nil {
+		// 			return err
+		// 		}
+		// 		if len(envs) == 0 {
+		// 			return "青龙没有京东账号。"
+		// 		}
+		// 		cks := []JdCookie{}
+		// 		for _, env := range envs {
+		// 			pt_key := FetchJdCookieValue("pt_key", env.Value)
+		// 			pt_pin := FetchJdCookieValue("pt_pin", env.Value)
+		// 			if pt_key != "" && pt_pin != "" {
+		// 				cks = append(cks, JdCookie{
+		// 					PtKey: pt_key,
+		// 					PtPin: pt_pin,
+		// 					Note:  env.Remarks,
+		// 				})
+		// 			}
+		// 		}
+		// 		cks = LimitJdCookie(cks, a)
+		// 		if len(cks) == 0 {
+		// 			return "没有匹配的京东账号。"
+		// 		}
+		// 		var beans []chan int
+		// 		for _, ck := range cks {
+		// 			var bean = make(chan int)
+		// 			go GetYestodayBean(&ck, bean)
+		// 			beans = append(beans, bean)
+		// 		}
+		// 		all := 0
+		// 		for i := range beans {
+		// 			all += <-beans[i]
+		// 		}
+		// 		return fmt.Sprintf("昨日收入%d京豆。", all)
+		// 	},
+		// },
 		{
 			Rules: []string{`imOf ?`},
 			Admin: true,
@@ -471,42 +499,42 @@ func initAsset() {
 				return rt
 			},
 		},
-		{
-			Rules: []string{`bean(?)`},
-			Admin: true,
-			Handle: func(s core.Sender) interface{} {
-				a := s.Get()
-				envs, err := qinglong.GetEnvs("JD_COOKIE")
-				if err != nil {
-					return err
-				}
-				if len(envs) == 0 {
-					return "青龙没有京东账号。"
-				}
-				cks := []JdCookie{}
-				for _, env := range envs {
-					pt_key := FetchJdCookieValue("pt_key", env.Value)
-					pt_pin := FetchJdCookieValue("pt_pin", env.Value)
-					if pt_key != "" && pt_pin != "" {
-						cks = append(cks, JdCookie{
-							PtKey: pt_key,
-							PtPin: pt_pin,
-							Note:  env.Remarks,
-						})
-					}
-				}
-				cks = LimitJdCookie(cks, a)
-				if len(cks) == 0 {
-					return "没有匹配的京东账号。"
-				}
-				all := 0
-				for _, ck := range cks {
-					ck.Available()
-					all += Int(ck.BeanNum)
-				}
-				return fmt.Sprintf("总计%d京豆。", all)
-			},
-		},
+		// {
+		// 	Rules: []string{`bean(?)`},
+		// 	Admin: true,
+		// 	Handle: func(s core.Sender) interface{} {
+		// 		a := s.Get()
+		// 		envs, err := GetEnvs("JD_COOKIE")
+		// 		if err != nil {
+		// 			return err
+		// 		}
+		// 		if len(envs) == 0 {
+		// 			return "青龙没有京东账号。"
+		// 		}
+		// 		cks := []JdCookie{}
+		// 		for _, env := range envs {
+		// 			pt_key := FetchJdCookieValue("pt_key", env.Value)
+		// 			pt_pin := FetchJdCookieValue("pt_pin", env.Value)
+		// 			if pt_key != "" && pt_pin != "" {
+		// 				cks = append(cks, JdCookie{
+		// 					PtKey: pt_key,
+		// 					PtPin: pt_pin,
+		// 					Note:  env.Remarks,
+		// 				})
+		// 			}
+		// 		}
+		// 		cks = LimitJdCookie(cks, a)
+		// 		if len(cks) == 0 {
+		// 			return "没有匹配的京东账号。"
+		// 		}
+		// 		all := 0
+		// 		for _, ck := range cks {
+		// 			ck.Available()
+		// 			all += Int(ck.BeanNum)
+		// 		}
+		// 		return fmt.Sprintf("总计%d京豆。", all)
+		// 	},
+		// },
 	})
 	go func() {
 		for {

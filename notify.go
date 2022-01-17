@@ -25,6 +25,7 @@ type JdNotify struct {
 	AssetCron    string
 	PushPlus     string
 	LoginedAt    time.Time
+	ClientID     string
 }
 
 var cc *cron.Cron
@@ -103,26 +104,41 @@ func initNotify() {
 		return nil
 	})
 	go func() {
+		time.Sleep(time.Second)
 		for {
-			envs, _ := qinglong.GetEnvs("JD_COOKIE")
-			for _, env := range envs {
-				if env.Status != 0 {
-					continue
-				}
-				pt_pin := core.FetchCookieValue(env.Value, "pt_pin")
-				pt_key := core.FetchCookieValue(env.Value, "pt_key")
-				if pt_pin != "" && pt_key != "" {
-					jn := &JdNotify{
-						ID: pt_pin,
+			for _, ql := range qinglong.GetQLS() {
+				as := 0
+				envs, _ := GetEnvs(ql, "JD_COOKIE")
+				for _, env := range envs {
+
+					if env.Status != 0 {
+						continue
 					}
-					jdNotify.First(jn)
-					if jn.PtKey != pt_key {
-						jn.PtKey = pt_key
-						jdNotify.Create(jn)
+					as++
+					pt_pin := core.FetchCookieValue(env.Value, "pt_pin")
+					pt_key := core.FetchCookieValue(env.Value, "pt_key")
+					if pt_pin != "" && pt_key != "" {
+						jn := &JdNotify{
+							ID: pt_pin,
+						}
+						jdNotify.First(jn)
+						tc := false
+						if jn.PtKey != pt_key {
+							jn.PtKey = pt_key
+							tc = true
+						}
+						if jn.ClientID != ql.ClientID {
+							jn.ClientID = ql.ClientID
+							tc = true
+						}
+						if tc {
+							jdNotify.Create(jn)
+						}
 					}
 				}
+				ql.SetNumber(as)
 			}
-			time.Sleep(time.Hour)
+			time.Sleep(time.Second * 30)
 		}
 	}()
 	core.AddCommand("", []core.Function{
@@ -131,12 +147,16 @@ func initNotify() {
 			Cron:  jd_cookie.Get("task_Notify", "2 7,13,19 * * *"),
 			Admin: true,
 			Handle: func(_ core.Sender) interface{} {
-				envs, _ := qinglong.GetEnvs("JD_COOKIE")
-				for _, env := range envs {
-					initPetTown(env.Value, nil)
-					initFarm(env.Value, nil)
-					dream(env.Value, nil)
-				}
+				jdNotify.Foreach(func(_, v []byte) error {
+					aa := &JdNotify{}
+					if json.Unmarshal(v, aa) == nil {
+						ck := fmt.Sprintf("pt_key=%s;pt_pin=%s;", aa.PtKey, aa.ID)
+						initPetTown(ck, nil)
+						initFarm(ck, nil)
+						dream(ck, nil)
+					}
+					return nil
+				})
 				return "推送完成"
 			},
 		},
@@ -614,7 +634,7 @@ func (ck *JdCookie) QueryAsset() string {
 		msgs = append(msgs, fmt.Sprintf("京东账号：%s", ck.PtPin))
 		msgs = append(msgs, []string{
 			// "提醒：该账号已过期，请重新登录。多账号的🐑毛党员注意了，登录第2个账号的时候，不可以退出第1个账号，退出会造成账号过期。可以在登录第2个账号前清除浏览器cookie，或者使用浏览器的无痕模式。",
-			"提醒：该账号已过期，请自行前往'http://jd.sf-dingdang.com/'进行登录”",
+			"提醒：该账号已过期，请对我说“登录“。”",
 		}...)
 	}
 	ck.PtPin, _ = url.QueryUnescape(ck.PtPin)
